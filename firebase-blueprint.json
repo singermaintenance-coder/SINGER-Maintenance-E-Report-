@@ -1,0 +1,85 @@
+{
+  "entities": {
+    "MaintenanceRecord": {
+      "title": "Maintenance Record",
+      "description": "A record of maintenance work performed on a machine",
+      "type": "object",
+      "properties": {
+        "maintainerName": { "type": "string" },
+        "role": { "enum": ["Admin", "Supervisor", "Maintainer"] },
+        "department": { "enum": ["Agro", "Modular", "Solid", "Sofa", "Other"] },
+        "machineId": { "type": "string" },
+        "machineName": { "type": "string" },
+        "workType": { "enum": ["Repair", "Service", "Break Down"] },
+        "timeType": { "enum": ["Now", "Previous"] },
+        "date": { "type": "string", "format": "date-time" },
+        "startTime": { "type": "string", "format": "date-time" },
+        "finishTime": { "type": "string", "format": "date-time" },
+        "duration": { "type": "number" },
+        "description": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["maintainerName", "role", "department", "machineId", "machineName", "workType", "timeType", "date", "startTime", "finishTime", "duration", "description", "createdAt"]
+    },
+    "MachineReport": {
+      "title": "Machine Report",
+      "description": "An operational report about a machine issue from a department",
+      "type": "object",
+      "properties": {
+        "department": { "enum": ["Agro", "Modular", "Solid", "Sofa", "Other"] },
+        "machineId": { "type": "string" },
+        "machineName": { "type": "string" },
+        "workType": { "enum": ["Repair", "Service", "Break Down"] },
+        "description": { "type": "string" },
+        "status": { "enum": ["pending", "addressed"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["department", "machineId", "machineName", "workType", "description", "status", "createdAt"]
+    },
+    "Machine": {
+      "title": "Machine",
+      "description": "An industrial machine used in a department",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "department": { "enum": ["Agro", "Modular", "Solid", "Sofa", "Other"] },
+        "image": { "type": "string" }
+      },
+      "required": ["name", "department"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "Alert for supervisors and maintainers",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "type": { "enum": ["Repair", "Service", "Break Down", "System"] },
+        "department": { "enum": ["Agro", "Modular", "Solid", "Sofa", "Other"] },
+        "machineId": { "type": "string" },
+        "machineName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "readBy": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["title", "message", "type", "department", "machineId", "createdAt", "readBy"]
+    }
+  },
+  "firestore": {
+    "/records/{recordId}": {
+      "schema": "MaintenanceRecord",
+      "description": "Historical maintenance log entries"
+    },
+    "/machine_reports/{reportId}": {
+      "schema": "MachineReport",
+      "description": "Real-time machine incident reports"
+    },
+    "/machines/{machineId}": {
+      "schema": "Machine",
+      "description": "Inventory of industrial machines"
+    },
+    "/notifications/{notificationId}": {
+      "schema": "Notification",
+      "description": "Alerts for operational staff"
+    }
+  }
+}

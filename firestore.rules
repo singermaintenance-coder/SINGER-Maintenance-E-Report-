@@ -1,0 +1,125 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Catch-all Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Connection testing
+    match /test/connection {
+      allow read: if true;
+    }
+
+    // VALIDATION HELPERS
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidRecord(data) {
+      return data.keys().hasAll(['id', 'maintainerName', 'role', 'department', 'machineId', 'machineName', 'workType', 'timeType', 'date', 'startTime', 'finishTime', 'duration', 'description', 'createdAt'])
+        && data.keys().size() >= 14 && data.keys().size() <= 16
+        && data.id is string && data.id.size() <= 128
+        && data.maintainerName is string && data.maintainerName.size() <= 200
+        && data.role is string && data.role.size() <= 50
+        && data.department is string && data.department.size() <= 100
+        && data.machineId is string && data.machineId.size() <= 128
+        && data.machineName is string && data.machineName.size() <= 200
+        && data.workType is string && data.workType.size() <= 50
+        && data.timeType is string && data.timeType.size() <= 50
+        && data.date is string && data.date.size() <= 100
+        && data.startTime is string && data.startTime.size() <= 100
+        && data.finishTime is string && data.finishTime.size() <= 100
+        && data.duration is number
+        && data.description is string && data.description.size() <= 6000
+        && data.createdAt is string && data.createdAt.size() <= 100;
+    }
+
+    function isValidReport(data) {
+      return data.keys().hasAll(['id', 'department', 'machineId', 'machineName', 'workType', 'description', 'status', 'createdAt'])
+        && data.keys().size() >= 8 && data.keys().size() <= 10
+        && data.id is string && data.id.size() <= 128
+        && data.department is string && data.department.size() <= 100
+        && data.machineId is string && data.machineId.size() <= 128
+        && data.machineName is string && data.machineName.size() <= 200
+        && data.workType is string && data.workType.size() <= 50
+        && data.description is string && data.description.size() <= 6000
+        && data.status is string && data.status.size() <= 50
+        && data.createdAt is string && data.createdAt.size() <= 100
+        && (!('scheduledAt' in data) || (data.scheduledAt is string && data.scheduledAt.size() <= 100));
+    }
+
+    function isValidMachine(data) {
+      return data.keys().hasAll(['id', 'name', 'department'])
+        && data.keys().size() >= 3 && data.keys().size() <= 5
+        && data.id is string && data.id.size() <= 128
+        && data.name is string && data.name.size() > 0 && data.name.size() <= 200
+        && data.department is string && data.department.size() <= 100
+        && (!('image' in data) || (data.image is string && data.image.size() <= 2000));
+    }
+
+    function isValidNotification(data) {
+      return data.keys().hasAll(['id', 'title', 'message', 'type', 'department', 'machineId', 'machineName', 'createdAt', 'readBy'])
+        && data.keys().size() >= 9 && data.keys().size() <= 11
+        && data.id is string && data.id.size() <= 128
+        && data.title is string && data.title.size() <= 200
+        && data.message is string && data.message.size() <= 1000
+        && data.type is string && data.type.size() <= 50
+        && data.department is string && data.department.size() <= 100
+        && data.machineId is string && data.machineId.size() <= 128
+        && data.machineName is string && data.machineName.size() <= 200
+        && data.createdAt is string && data.createdAt.size() <= 100
+        && data.readBy is list && data.readBy.size() <= 100;
+    }
+
+    // RECORDS COLLECTION
+    match /records/{recordId} {
+      allow read: if true;
+      allow create: if isValidId(recordId) && isValidRecord(incoming());
+      allow update: if isValidId(recordId) && (
+        incoming().diff(existing()).affectedKeys().hasOnly(['description'])
+        && (incoming().description is string && incoming().description.size() <= 6000)
+      );
+      allow delete: if true;
+    }
+
+    // MACHINE REPORTS COLLECTION
+    match /machine_reports/{reportId} {
+      allow read: if true;
+      allow create: if isValidId(reportId) && isValidReport(incoming());
+      allow update: if isValidId(reportId) && (
+        incoming().diff(existing()).affectedKeys().hasAny(['status', 'description', 'scheduledAt'])
+        && (!('status' in incoming()) || incoming().status in ['pending', 'in-progress', 'addressed'])
+        && (!('description' in incoming()) || (incoming().description is string && incoming().description.size() <= 6000))
+        && (!('scheduledAt' in incoming()) || (incoming().scheduledAt is string && incoming().scheduledAt.size() <= 100))
+      );
+      allow delete: if true;
+    }
+
+    // INVENTORY MACHINES COLLECTION
+    match /machines/{machineId} {
+      allow read: if true;
+      allow write: if isValidId(machineId) && isValidMachine(incoming());
+      allow delete: if true;
+    }
+
+    // NOTIFICATIONS COLLECTION
+    match /notifications/{notificationId} {
+      allow read: if true;
+      allow create: if isValidId(notificationId) && isValidNotification(incoming());
+      allow update: if isValidId(notificationId) && (
+        incoming().diff(existing()).affectedKeys().hasOnly(['readBy'])
+        && incoming().readBy is list
+      );
+      allow delete: if true;
+    }
+  }
+}

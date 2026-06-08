@@ -1,0 +1,8 @@
+{
+  "name": "Remix: Remix: SINGER Maintenance E-Report",
+  "description": "Industrial machine maintenance record management system for factory factory environments.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
