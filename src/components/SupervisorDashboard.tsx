@@ -12,7 +12,6 @@ import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, addMont
 import { cn, formatDate, formatTime } from '../lib/utils';
 import { translateToEnglish } from '../services/geminiService';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
-import ModularMap from './ModularMap';
 import NotificationTray from './NotificationTray';
 import AITranslationTool from './AITranslationTool';
 
@@ -1560,98 +1559,36 @@ export default function SupervisorDashboard({
 
         {activeTab === 'map' && (
           <motion.div
-            key="factory-floor-map"
+            key="factory-floor-map-dev"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
             className="space-y-12"
           >
-            <div className="bg-white p-12 rounded-[40px] border-2 border-slate-100 shadow-xl relative overflow-hidden group">
-              <div className="absolute top-0 right-0 p-12 opacity-[0.03] text-slate-900 text-6xl sm:text-[12rem] font-black italic select-none">
-                FLOOR
+            <div className="bg-white p-12 rounded-[40px] border-2 border-slate-100 shadow-xl relative overflow-hidden text-center max-w-2xl mx-auto my-12">
+              <div className="absolute top-0 right-0 p-12 opacity-[0.03] text-slate-900 text-6xl sm:text-[10rem] font-black italic select-none pointer-events-none">
+                SOON
               </div>
-              <div className="relative z-10 space-y-6">
-                <div className="flex items-center gap-6">
-                  <div className="w-16 h-2 bg-singer-red" />
-                  <h2 className="text-4xl sm:text-6xl font-black text-slate-900 tracking-tighter uppercase italic leading-none">Interactive <span className="text-singer-red underline decoration-slate-900 underline-offset-8">Floor Map</span></h2>
+              <div className="relative z-10 flex flex-col items-center space-y-6 py-6">
+                <div className="w-16 h-16 rounded-full bg-amber-50 text-amber-500 flex items-center justify-center animate-pulse">
+                  <MapIcon size={32} />
                 </div>
-                <p className="text-xl font-bold text-slate-400 uppercase tracking-widest max-w-2xl">Real-time status tracking and spatial overview of machines inside the Modular Factory.</p>
-              </div>
-            </div>
-
-            {/* Scrollable Container for Horizontal Viewport Adaption on Touch/Mobile Screens */}
-            <div className="w-full overflow-x-auto pb-6 select-none -mx-4 px-4 sm:mx-0 sm:px-0">
-              <div className="min-w-[900px] lg:min-w-0 lg:w-full h-[650px] sm:h-[750px]">
-                <ModularMap machines={machines} reports={reports} />
-              </div>
-            </div>
-
-            <div className="bg-white p-12 rounded-[40px] border-2 border-slate-100 shadow-xl relative overflow-hidden group">
-              <div className="absolute top-0 right-0 p-12 opacity-[0.03] text-slate-900 text-[12rem] font-black italic select-none">
-                2026
-              </div>
-              <div className="relative z-10 space-y-6">
-                <div className="flex items-center gap-6">
-                  <div className="w-16 h-2 bg-singer-red" />
-                  <h2 className="text-4xl sm:text-6xl font-black text-slate-900 tracking-tighter uppercase italic leading-none">Strategic <span className="text-singer-red underline decoration-slate-900 underline-offset-8">Roadmap</span></h2>
+                <div className="space-y-2">
+                  <span className="text-[10px] font-black tracking-widest text-singer-red uppercase leading-none block">
+                    Feature Under Development
+                  </span>
+                  <h2 className="text-4xl font-extrabold text-slate-900 tracking-tighter uppercase italic leading-tight">
+                    Interactive <span className="text-singer-red">Floor Map</span>
+                  </h2>
                 </div>
-                <p className="text-xl font-bold text-slate-400 uppercase tracking-widest max-w-2xl">Visualizing the future of machine diagnostics and spatial floor management.</p>
+                <div className="w-12 h-1 bg-slate-200" />
+                <p className="text-base font-semibold text-slate-500 leading-relaxed max-w-md">
+                  We are actively developing and improving the spatial floor mapping feature. This system will offer real-time machine layouts and interactive telemetry. It will be available in a future system update.
+                </p>
+                <div className="text-[10px] font-black text-slate-350 uppercase tracking-widest bg-slate-50 px-4 py-2 rounded-full border border-slate-100">
+                  Singer Maintenance System © 2026
+                </div>
               </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {[
-                {
-                  title: "Multi-Dept Support",
-                  desc: "Expanded interactive maps for Packaging, Sewing, and Finishing departments for global oversight.",
-                  icon: <Layers size={32} />,
-                  color: "bg-blue-50 text-blue-600"
-                },
-                {
-                  title: "Efficiency Heatmaps",
-                  desc: "Visualize machine downtime frequency through thermal overlays on the floor plan.",
-                  icon: <Activity size={32} />,
-                  color: "bg-red-50 text-red-600"
-                },
-                {
-                  title: "Maintainer Tracking",
-                  desc: "Real-time location nodes for active maintainers to optimize task distribution.",
-                  icon: <Users size={32} />,
-                  color: "bg-green-50 text-green-600"
-                },
-                {
-                  title: "AI Predictive Alerts",
-                  desc: "Smart telemetry data predicting failures before they occur based on service frequency.",
-                  icon: <Cpu size={32} />,
-                  color: "bg-purple-50 text-purple-600"
-                },
-                {
-                  title: "Full-Screen Mode",
-                  desc: "Immersive spatial view for large command center displays with real-time incident highlights.",
-                  icon: <Maximize size={32} />,
-                  color: "bg-orange-50 text-orange-600"
-                },
-                {
-                  title: "Custom Grid Editor",
-                  desc: "Allow supervisors to drag and drop machine nodes to mirror physical factory floor changes.",
-                  icon: <Settings size={32} />,
-                  color: "bg-slate-50 text-slate-600"
-                }
-              ].map((item, i) => (
-                <motion.div
-                  key={i}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.1 }}
-                  className="bg-white p-10 rounded-[32px] border-2 border-slate-100 shadow-lg hover:shadow-2xl hover:border-slate-900 transition-all group"
-                >
-                  <div className={cn("w-16 h-16 rounded-[24px] flex items-center justify-center mb-8 transform group-hover:scale-110 transition-transform", item.color)}>
-                    {item.icon}
-                  </div>
-                  <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter italic mb-4">{item.title}</h3>
-                  <p className="text-slate-400 font-bold text-sm leading-relaxed">{item.desc}</p>
-                </motion.div>
-              ))}
             </div>
           </motion.div>
         )}
