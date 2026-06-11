@@ -7,21 +7,7 @@ export default defineConfig(() => {
   return {
     plugins: [react(), tailwindcss()],
     build: {
-      chunkSizeWarningLimit: 1000,
-      rollupOptions: {
-        output: {
-          manualChunks(id) {
-            if (id.includes('node_modules')) {
-              // Group major libraries together to ensure internal consistency
-              if (id.includes('firebase')) return 'vendor-firebase';
-              if (id.includes('recharts') || id.includes('d3')) return 'vendor-charts';
-              if (id.includes('lucide-react')) return 'vendor-icons';
-              // Keep React and core UI logic in the main vendor chunk
-              return 'vendor';
-            }
-          }
-        }
-      }
+      chunkSizeWarningLimit: 1000
     },
     resolve: {
       alias: {
