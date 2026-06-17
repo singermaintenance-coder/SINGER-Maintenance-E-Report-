@@ -52,15 +52,19 @@ function ErrorBoundary({ children }: { children: React.ReactNode }) {
       const msg = 'reason' in event ? event.reason : event.message;
       const errorMsg = String(msg || '');
 
-      // Ignore benign development, WebSocket, HMR, and transport connection-related errors
+      // Ignore benign development, WebSocket, HMR, and transport connection-related errors, plus ResizeObserver notifications
       if (
         errorMsg.toLowerCase().includes('websocket') ||
         errorMsg.toLowerCase().includes('hmr') ||
         errorMsg.toLowerCase().includes('vite') ||
         errorMsg.toLowerCase().includes('failed to fetch') ||
-        errorMsg.toLowerCase().includes('connection')
+        errorMsg.toLowerCase().includes('connection') ||
+        errorMsg.toLowerCase().includes('resizeobserver') ||
+        errorMsg.toLowerCase().includes('resize observer') ||
+        errorMsg.toLowerCase().includes('loop completed with undelivered notifications') ||
+        errorMsg.toLowerCase().includes('loop limit exceeded')
       ) {
-        console.warn("[ErrorBoundary] Ignored benign runtime connection/WebSocket event:", errorMsg);
+        console.warn("[ErrorBoundary] Ignored benign runtime event/ResizeObserver:", errorMsg);
         return;
       }
 
