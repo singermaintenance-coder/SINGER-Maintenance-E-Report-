@@ -14,6 +14,7 @@ import SingerLogo from './components/SingerLogo';
 import { db } from './lib/firebase';
 import { collection, onSnapshot, query, orderBy, setDoc, doc, deleteDoc } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from './lib/utils';
+import { translateToEnglish } from './services/geminiService';
 
 // Lazy loaded components
 const Login = lazy(() => import('./components/Login'));
@@ -233,6 +234,9 @@ export default function App() {
   const addRecord = async (newRecord: MaintenanceRecord) => {
     try {
       console.log("[FirestoreWrite] Saving record:", newRecord.id);
+      if (newRecord.description) {
+        newRecord.description = await translateToEnglish(newRecord.description);
+      }
       await setDoc(doc(db, 'records', newRecord.id), newRecord);
       console.log("[FirestoreWrite] Saved record successfully:", newRecord.id);
     } catch (error) {
@@ -246,6 +250,9 @@ export default function App() {
       console.log("[FirestoreWrite] Saving report:", newReport.id);
       const data = { ...newReport };
       if (data.scheduledAt === undefined) delete data.scheduledAt;
+      if (data.description) {
+        data.description = await translateToEnglish(data.description);
+      }
       await setDoc(doc(db, 'machine_reports', data.id), data);
       console.log("[FirestoreWrite] Saved report successfully:", newReport.id);
 
@@ -302,6 +309,9 @@ export default function App() {
       console.log("[FirestoreWrite] Updating report:", reportId, updates);
       const data = { ...updates };
       if (data.scheduledAt === undefined) delete data.scheduledAt;
+      if (data.description) {
+        data.description = await translateToEnglish(data.description);
+      }
       await setDoc(doc(db, 'machine_reports', reportId), data, { merge: true });
       console.log("[FirestoreWrite] Updated report successfully:", reportId);
 
@@ -361,7 +371,11 @@ export default function App() {
   const updateRecord = async (recordId: string, updates: Partial<MaintenanceRecord>) => {
     try {
       console.log("[FirestoreWrite] Updating record:", recordId, updates);
-      await setDoc(doc(db, 'records', recordId), updates, { merge: true });
+      const data = { ...updates };
+      if (data.description) {
+        data.description = await translateToEnglish(data.description);
+      }
+      await setDoc(doc(db, 'records', recordId), data, { merge: true });
       console.log("[FirestoreWrite] Updated record successfully:", recordId);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `records/${recordId}`);
