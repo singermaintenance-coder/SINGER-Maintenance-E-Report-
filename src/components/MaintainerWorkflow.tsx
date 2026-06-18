@@ -353,6 +353,9 @@ export default function MaintainerWorkflow({
       return;
     }
 
+    const reportToClose = activeReport || pendingReportForMachine;
+    const associatedReport = reportToClose || matchedReport;
+
     const record: MaintenanceRecord = {
       id: Math.random().toString(36).substr(2, 9),
       maintainerName: user.name,
@@ -368,13 +371,14 @@ export default function MaintainerWorkflow({
       duration: calculateDuration(startTime, finishTime),
       description,
       shift: activeReport?.shift || pendingReportForMachine?.shift || selectedShift || 'None Shift',
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      reportId: associatedReport?.id,
+      problemDescription: associatedReport?.description
     };
 
     onSave(record);
 
     // Finalize report if one was active
-    const reportToClose = activeReport || pendingReportForMachine;
     if (reportToClose && onUpdateReport) {
       await onUpdateReport(reportToClose.id, { status: 'addressed' });
     }
@@ -400,6 +404,8 @@ export default function MaintainerWorkflow({
     if (!department || !machine) return;
 
     const now = new Date().toISOString();
+    const associatedReport = pendingReportForMachine || matchedReport;
+
     const record: MaintenanceRecord = {
       id: Math.random().toString(36).substr(2, 9),
       maintainerName: user.name,
@@ -414,7 +420,9 @@ export default function MaintainerWorkflow({
       finishTime: now,
       duration: 0,
       description: 'Service Requested',
-      createdAt: now
+      createdAt: now,
+      reportId: associatedReport?.id,
+      problemDescription: associatedReport?.description
     };
 
     onSave(record);
@@ -442,6 +450,9 @@ export default function MaintainerWorkflow({
         return;
       }
 
+      const reportToClose = activeReport || pendingReportForMachine;
+      const associatedReport = reportToClose || matchedReport;
+
       const record: MaintenanceRecord = {
         id: Math.random().toString(36).substr(2, 9),
         maintainerName: user.name,
@@ -457,13 +468,14 @@ export default function MaintainerWorkflow({
         duration: calculateDuration(startTime, finishTime),
         description: translated,
         shift: activeReport?.shift || pendingReportForMachine?.shift || selectedShift || 'None Shift',
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        reportId: associatedReport?.id,
+        problemDescription: associatedReport?.description
       };
 
       onSave(record);
 
       // Finalize report
-      const reportToClose = activeReport || pendingReportForMachine;
       if (reportToClose && onUpdateReport) {
         await onUpdateReport(reportToClose.id, { status: 'addressed' });
       }

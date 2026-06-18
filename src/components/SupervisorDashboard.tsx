@@ -80,7 +80,7 @@ export default function SupervisorDashboard({
 }) {
   const [activeTab, setActiveTab] = useState<'pending' | 'completed' | 'analysis' | 'map'>('pending');
   const [currentMonth, setCurrentMonth] = useState(new Date());
-  const [selectedDate, setSelectedDate] = useState<Date | null>(new Date());
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [filterDept, setFilterDept] = useState<Factory | 'All'>('All');
   const [editingReportId, setEditingReportId] = useState<string | null>(null);
   const [editingRecordId, setEditingRecordId] = useState<string | null>(null);
@@ -211,33 +211,78 @@ export default function SupervisorDashboard({
     end: endOfMonth(currentMonth),
   });
 
-  const dailyRecords = records.filter(r => 
-    selectedDate && isSameDay(new Date(r.date), selectedDate) &&
-    (filterDept === 'All' || r.department === filterDept || (filterDept === 'Other' && SUB_LOCATIONS.includes(r.department)))
-  );
+  const dailyRecords = records.filter(r => {
+    const rDate = new Date(r.date);
+    const dateMatch = selectedDate 
+      ? isSameDay(rDate, selectedDate)
+      : isSameMonth(rDate, currentMonth);
+    return dateMatch && (filterDept === 'All' || r.department === filterDept || (filterDept === 'Other' && SUB_LOCATIONS.includes(r.department)));
+  });
 
-  const pendingReports = reports.filter(r => 
-    (showAddressed ? (r.status === 'pending' || r.status === 'addressed') : r.status === 'pending') &&
-    (!selectedDate || isSameDay(new Date(r.createdAt), selectedDate)) &&
-    (filterDept === 'All' || r.department === filterDept || (filterDept === 'Other' && SUB_LOCATIONS.includes(r.department)))
-  );
+  const pendingReports = reports.filter(r => {
+    const rDate = new Date(r.createdAt);
+    const dateMatch = selectedDate
+      ? isSameDay(rDate, selectedDate)
+      : isSameMonth(rDate, currentMonth);
+    return (showAddressed ? (r.status === 'pending' || r.status === 'addressed') : r.status === 'pending') &&
+      dateMatch &&
+      (filterDept === 'All' || r.department === filterDept || (filterDept === 'Other' && SUB_LOCATIONS.includes(r.department)));
+  });
 
-  const prevMonth = () => setCurrentMonth(subMonths(currentMonth, 1));
-  const nextMonth = () => setCurrentMonth(addMonths(currentMonth, 1));
+  const prevMonth = () => {
+    setCurrentMonth(subMonths(currentMonth, 1));
+    setSelectedDate(null);
+  };
+  const nextMonth = () => {
+    setCurrentMonth(addMonths(currentMonth, 1));
+    setSelectedDate(null);
+  };
 
   const exportToCSV = () => {
-    const headers = ['Date', 'Maintainer', 'Factory', 'Machine', 'Type', 'Start', 'Finish', 'Duration', 'Description'];
-    const rows = records.map(r => [
-      formatDate(r.date),
-      r.maintainerName,
-      r.department,
-      r.machineName.replace(/<br\s*\/?>/gi, ' '),
-      r.workType,
-      formatDateTime(r.startTime),
-      formatDateTime(r.finishTime),
-      `${r.duration}m`,
-      r.description.replace(/,/g, ';')
-    ]);
+    const headers = [
+      'Factory',
+      'Machine',
+      'Work Type',
+      'Work Shift',
+      'Reported Date',
+      'Reported By',
+      'Problem Description',
+      'Maintenance Action',
+      'Start Time',
+      'Finish Time',
+      'Calculated Duration',
+      'Status'
+    ];
+
+    const escapeCSVValue = (val: string | number) => {
+      const str = String(val ?? '');
+      if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+
+    const rows = records.map(r => {
+      const matchingReport = reports.find(rep => rep.id === r.reportId || (rep.machineId === r.machineId && rep.workType === r.workType));
+      const problemDescription = r.problemDescription || matchingReport?.description || 'N/A';
+      const reportedDate = matchingReport ? formatDateTime(matchingReport.createdAt) : formatDate(r.date);
+      const reportedBy = 'Factory Manager';
+
+      return [
+        escapeCSVValue(r.department),
+        escapeCSVValue(r.machineName.replace(/<br\s*\/?>/gi, ' ')),
+        escapeCSVValue(r.workType),
+        escapeCSVValue(r.shift || 'None Shift'),
+        escapeCSVValue(reportedDate),
+        escapeCSVValue(reportedBy),
+        escapeCSVValue(problemDescription),
+        escapeCSVValue(r.description),
+        escapeCSVValue(formatDateTime(r.startTime)),
+        escapeCSVValue(formatDateTime(r.finishTime)),
+        escapeCSVValue(`${r.duration}m`),
+        escapeCSVValue('Resolved')
+      ];
+    });
 
     const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -499,6 +544,53 @@ export default function SupervisorDashboard({
 
             {/* Reports List Column */}
             <div className="lg:col-span-8 space-y-12">
+              <div className="flex flex-col sm:flex-row items-start sm:items-end justify-between gap-4 border-l-4 border-amber-500 pl-4 sm:pl-6 py-2 mb-6">
+                <div>
+                  <h2 className="text-3xl sm:text-5xl font-black text-slate-900 tracking-tighter uppercase italic">
+                    {selectedDate ? format(selectedDate, 'MMM do') : `${format(currentMonth, 'MMMM yyyy')} Overview`}
+                  </h2>
+                  <div className="flex flex-wrap items-center gap-2 mt-1">
+                    <p className="text-slate-400 font-bold uppercase text-[9px] sm:text-[10px] tracking-widest leading-none">
+                      {selectedDate ? format(selectedDate, 'EEEE, yyyy') : "All Monthly Active Alerts & Incidents"}
+                    </p>
+                    {selectedDate && (() => {
+                      const holiday = getSriLankanHoliday(selectedDate);
+                      if (holiday) {
+                        return (
+                          <span className="px-2 py-0.5 text-[8px] font-black tracking-widest uppercase bg-amber-100 text-amber-800 border border-amber-200 rounded leading-none">
+                            {holiday.name} ({holiday.type})
+                          </span>
+                        );
+                      }
+                      if (isSunday(selectedDate)) {
+                        return (
+                          <span className="px-2 py-0.5 text-[8px] font-black tracking-widest uppercase bg-blue-50 text-blue-800 border border-blue-200 rounded leading-none">
+                            Sunday (Non-Working)
+                          </span>
+                        );
+                      }
+                      return null;
+                    })()}
+                  </div>
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-4xl sm:text-6xl font-black text-slate-900 tracking-tighter tabular-nums leading-none">
+                      {pendingReports.length} 
+                    </span>
+                    <span className="text-[10px] sm:text-xs font-black text-slate-300 uppercase tracking-widest leading-none">Pending Alerts</span>
+                  </div>
+                  {selectedDate && (
+                    <button 
+                      onClick={() => setSelectedDate(null)}
+                      className="px-4 py-2 border border-slate-200 bg-slate-50 hover:bg-slate-900 hover:text-white rounded-xl text-[9px] font-black uppercase tracking-widest transition-all shadow-sm"
+                    >
+                      Show Full Month
+                    </button>
+                  )}
+                </div>
+              </div>
+
               {FACTORIES.map(dept => {
                 const deptReports = pendingReports.filter(r => 
                   r.department === dept || (dept === 'Other' && SUB_LOCATIONS.includes(r.department))
@@ -527,9 +619,16 @@ export default function SupervisorDashboard({
                           </div>
                           <div className="flex justify-between items-start mb-4 relative z-10">
                             <div className="space-y-1">
-                              <span className="bg-singer-red text-white px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest">
-                                {report.workType}
-                              </span>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="bg-singer-red text-white px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest">
+                                  {report.workType}
+                                </span>
+                                {!selectedDate && (
+                                  <span className="bg-slate-100 text-slate-600 border border-slate-200 px-3 py-1 rounded-lg text-[9px] font-bold uppercase tracking-widest font-mono">
+                                    {format(new Date(report.createdAt), 'yyyy-MM-dd')}
+                                  </span>
+                                )}
+                              </div>
                               <h3 className="text-2xl font-black text-slate-900 leading-tight uppercase tracking-tighter mt-1" dangerouslySetInnerHTML={{ __html: report.machineName || 'Unknown Machine' }} />
                             </div>
                             <div className="flex gap-2">
@@ -667,7 +766,7 @@ export default function SupervisorDashboard({
                           <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-slate-300 relative z-10">
                             <div className="flex items-center gap-2">
                               <div className="w-1.5 h-1.5 bg-singer-red rounded-full animate-pulse" />
-                              Logged: {format(new Date(report.createdAt), 'yyyy-MM-dd')} @ {formatTime(report.createdAt)}
+                              Logged: {selectedDate ? '' : `${format(new Date(report.createdAt), 'yyyy-MM-dd')} @ `}{formatTime(report.createdAt)}
                             </div>
                             <span>ID: {report.id.toUpperCase()}</span>
                           </div>
@@ -805,23 +904,22 @@ export default function SupervisorDashboard({
 
             {/* Records Detail Column */}
             <div className="lg:col-span-8">
-              {selectedDate ? (
-                <motion.div 
-                  key={selectedDate.toString() + filterDept}
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  className="space-y-6"
-                >
-                    <div className="flex flex-col sm:flex-row items-start sm:items-end justify-between gap-4 border-l-4 border-singer-red pl-4 sm:pl-6 py-2">
-                    <div>
-                      <h2 className="text-3xl sm:text-5xl font-black text-slate-900 tracking-tighter uppercase italic">
-                        {format(selectedDate, 'MMM do')}
-                      </h2>
-                      <div className="flex flex-wrap items-center gap-2 mt-1">
-                        <p className="text-slate-400 font-bold uppercase text-[9px] sm:text-[10px] tracking-widest leading-none">
-                          {format(selectedDate, 'EEEE, yyyy')}
-                        </p>
-                        {(() => {
+              <motion.div 
+                key={(selectedDate?.toString() || 'all-month') + filterDept}
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                className="space-y-6"
+              >
+                  <div className="flex flex-col sm:flex-row items-start sm:items-end justify-between gap-4 border-l-4 border-singer-red pl-4 sm:pl-6 py-2">
+                  <div>
+                    <h2 className="text-3xl sm:text-5xl font-black text-slate-900 tracking-tighter uppercase italic">
+                      {selectedDate ? format(selectedDate, 'MMM do') : `${format(currentMonth, 'MMMM yyyy')} Overview`}
+                    </h2>
+                    <div className="flex flex-wrap items-center gap-2 mt-1">
+                      <p className="text-slate-400 font-bold uppercase text-[9px] sm:text-[10px] tracking-widest leading-none">
+                        {selectedDate ? format(selectedDate, 'EEEE, yyyy') : "Full Month Records Archive"}
+                      </p>
+                        {selectedDate && (() => {
                           const holiday = getSriLankanHoliday(selectedDate);
                           if (holiday) {
                             return (
@@ -848,7 +946,7 @@ export default function SupervisorDashboard({
                         </span>
                         <span className="text-[10px] sm:text-xs font-black text-slate-300 uppercase tracking-widest leading-none">Events Logged</span>
                       </div>
-                      {dailyRecords.length > 0 && onDeleteRecord && (
+                      {selectedDate && dailyRecords.length > 0 && onDeleteRecord && (
                         <button 
                           onClick={async () => {
                             if (confirmingClearDate) {
@@ -871,6 +969,14 @@ export default function SupervisorDashboard({
                           {confirmingClearDate ? "Confirm Wipe Out?" : "Clear Date"}
                         </button>
                       )}
+                      {selectedDate && (
+                        <button 
+                          onClick={() => setSelectedDate(null)}
+                          className="px-4 py-2 border border-slate-200 bg-slate-50 hover:bg-slate-900 hover:text-white rounded-xl text-[9px] font-black uppercase tracking-widest transition-all shadow-sm"
+                        >
+                          Show Full Month
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -891,6 +997,11 @@ export default function SupervisorDashboard({
                                   )}>
                                     {record.workType}
                                   </span>
+                                  {!selectedDate && (
+                                    <span className="bg-slate-100 text-slate-600 border border-slate-200 px-2 sm:px-3 py-1 rounded text-[9px] sm:text-[10px] font-bold uppercase tracking-widest font-mono">
+                                      {format(new Date(record.date), 'yyyy-MM-dd')}
+                                    </span>
+                                  )}
                                 </div>
                                 <div className="flex gap-2">
                                   {editingDateRecordId === record.id ? (
@@ -1046,19 +1157,11 @@ export default function SupervisorDashboard({
                       <div className="bg-white rounded-[32px] sm:rounded-[40px] p-12 sm:p-24 text-center border-4 border-dashed border-slate-100">
                         <CalendarIcon size={48} className="mx-auto text-slate-100 mb-4 sm:mb-6" />
                         <p className="text-slate-300 font-black uppercase tracking-[0.3em] sm:tracking-[0.4em] text-base sm:text-lg">No Operational Data</p>
-                        <p className="text-slate-400 font-medium mt-2 text-xs sm:text-sm italic">Historical records show silence on this date.</p>
+                        <p className="text-slate-400 font-medium mt-2 text-xs sm:text-sm italic">Historical records show silence on this selection.</p>
                       </div>
                     )}
                   </div>
                 </motion.div>
-              ) : (
-                <div className="h-full flex items-center justify-center min-h-[300px]">
-                  <div className="text-center">
-                    <div className="text-slate-100 font-black uppercase text-6xl sm:text-9xl tracking-tighter italic select-none">IDLE</div>
-                    <p className="text-slate-400 font-black uppercase tracking-[0.2em] -mt-4 sm:-mt-8 relative z-10 text-[9px] sm:text-xs">Select Temporal Node To Observe</p>
-                  </div>
-                </div>
-              )}
             </div>
           </motion.div>
         )}
@@ -1116,7 +1219,7 @@ export default function SupervisorDashboard({
             </div>
 
             {/* Factory Summary Statistics Area (UX Step 1) */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <motion.div 
                 initial={{ opacity: 0, y: 15 }} 
                 animate={{ opacity: 1, y: 0 }}
@@ -1139,25 +1242,6 @@ export default function SupervisorDashboard({
                 className="bg-white p-6 rounded-[28px] border-2 border-slate-100 shadow-md flex items-center justify-between"
               >
                 <div>
-                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Factory Efficiency</h4>
-                  <p className={cn(
-                    "text-4xl font-black italic tracking-tighter",
-                    factorySummaryStats.averageEfficiency >= 90 ? "text-emerald-600" : "text-amber-600"
-                  )}>{factorySummaryStats.averageEfficiency}%</p>
-                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mt-1">Target: {formatHoursDisplay(factorySummaryStats.totalPossibleHours)} limit</p>
-                </div>
-                <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
-                  <Gauge className="w-6 h-6" />
-                </div>
-              </motion.div>
-
-              <motion.div 
-                initial={{ opacity: 0, y: 15 }} 
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 }}
-                className="bg-white p-6 rounded-[28px] border-2 border-slate-100 shadow-md flex items-center justify-between"
-              >
-                <div>
                   <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Downtime</h4>
                   <p className="text-4xl font-black italic text-slate-900 tracking-tighter">{formatHoursDisplay(factorySummaryStats.totalDowntimeHours)}</p>
                   <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mt-1">Accumulated Repair/Service Hours</p>
@@ -1170,7 +1254,7 @@ export default function SupervisorDashboard({
               <motion.div 
                 initial={{ opacity: 0, y: 15 }} 
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 }}
+                transition={{ delay: 0.2 }}
                 className="bg-white p-6 rounded-[28px] border-2 border-slate-100 shadow-md flex flex-col justify-between gap-2"
               >
                 <div className="flex items-center justify-between">

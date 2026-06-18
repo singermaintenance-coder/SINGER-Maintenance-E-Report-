@@ -36,6 +36,8 @@ export interface MaintenanceRecord {
   description: string;
   shift?: string; // e.g. "7:30 AM - 4:30 PM"
   createdAt: string; // ISO string
+  problemDescription?: string;
+  reportId?: string;
 }
 
 export interface MachineReport {
