@@ -24,7 +24,7 @@ import {
   ChevronLeft as ChevronLeftIcon,
   ChevronRight as ChevronRightIcon
 } from 'lucide-react';
-import { cn, formatTime } from '../lib/utils';
+import { cn, formatTime, getSriLankanHoliday, isSunday } from '../lib/utils';
 import { translateToEnglish } from '../services/geminiService';
 import { 
   format, 
@@ -83,10 +83,11 @@ export default function ModularFactoryFlow({
   departmentName?: string
 }) {
   const [selectedSolidSection, setSelectedSolidSection] = useState<'Main Solid' | 'Machine Section' | 'Paint Section' | null>(null);
-  const [step, setStep] = useState<'machines' | 'location' | 'work-types' | 'description' | 'scheduling'>('machines');
+  const [step, setStep] = useState<'machines' | 'location' | 'work-types' | 'shift' | 'description' | 'scheduling'>('machines');
   const [selectedMachine, setSelectedMachine] = useState<Machine | null>(null);
   const [selectedLocation, setSelectedLocation] = useState<string | null>(null);
   const [selectedWorkType, setSelectedWorkType] = useState<WorkType | null>(null);
+  const [selectedShift, setSelectedShift] = useState<string>('');
   const [description, setDescription] = useState('');
   const [scheduledAt, setScheduledAt] = useState<string>('');
   const [scheduledMonth, setScheduledMonth] = useState(new Date());
@@ -146,6 +147,7 @@ export default function ModularFactoryFlow({
       description: desc,
       status: 'pending',
       createdAt: new Date().toISOString(),
+      shift: selectedShift || 'None Shift',
       ...(scheduledDate && { scheduledAt: scheduledDate })
     };
 
@@ -155,6 +157,7 @@ export default function ModularFactoryFlow({
       setSelectedMachine(null);
       setSelectedWorkType(null);
       setDescription('');
+      setSelectedShift('');
     } catch (error) {
       console.error("Report submission failed", error);
     } finally {
@@ -188,11 +191,7 @@ export default function ModularFactoryFlow({
 
   const handleWorkTypeSelect = async (type: WorkType) => {
     setSelectedWorkType(type);
-    if (type === 'Service') {
-      setStep('scheduling');
-    } else {
-      setStep('description');
-    }
+    setStep('shift');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -249,16 +248,25 @@ export default function ModularFactoryFlow({
                       <span className="text-[9px] font-black uppercase text-singer-red bg-singer-red/5 px-2 py-0.5 rounded-full border border-singer-red/10">
                         {report.workType}
                       </span>
-                      {report.scheduledAt ? (
-                        <span className="text-[8px] font-black text-amber-500 flex items-center gap-1 animate-pulse">
-                          <Calendar size={10} /> PLANNED @ {new Date(report.scheduledAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                      ) : (
-                        <span className="text-[8px] font-bold text-slate-400 flex items-center gap-1">
-                          <Clock size={10} /> {formatTime(report.createdAt)}
+                      {report.scheduledAt && (
+                        <span className="text-[8px] font-black text-amber-500 flex items-center gap-1 animate-pulse bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                          <Calendar size={10} /> PLANNED
                         </span>
                       )}
                     </div>
+
+                    {/* Date and Time block matching user instructions */}
+                    <div className="grid grid-cols-2 gap-2 bg-white border border-slate-200 rounded-xl p-3 text-[10px] font-bold text-slate-600 shadow-sm relative z-10">
+                      <div>
+                        <span className="text-slate-400 block uppercase text-[8px] font-black leading-none mb-1">Date</span>
+                        <span className="font-mono text-slate-900 font-extrabold text-xs">{format(new Date(report.createdAt), 'yyyy-MM-dd')}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block uppercase text-[8px] font-black leading-none mb-1">Time</span>
+                        <span className="font-mono text-slate-900 font-extrabold text-xs">{formatTime(report.createdAt)}</span>
+                      </div>
+                    </div>
+
                     <div className="text-sm font-black text-slate-900 uppercase tracking-tight flex items-center gap-2" dangerouslySetInnerHTML={{ __html: report.machineName.replace('<br>', ' ') }} />
                     <div className="bg-red-600 text-white text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full w-fit">
                       {report.department === 'Other' ? 'OTHER' : (report.department.includes('FACTORY') ? report.department.replace(' FACTORY', '') : report.department)}
@@ -296,8 +304,9 @@ export default function ModularFactoryFlow({
                 if (departmentName === 'Other') setStep('location');
                 else setStep('machines');
               }
-              else if (step === 'description') setStep('work-types');
-              else if (step === 'scheduling') setStep('work-types');
+              else if (step === 'shift') setStep('work-types');
+              else if (step === 'description') setStep('shift');
+              else if (step === 'scheduling') setStep('shift');
             }}
             className="absolute left-0 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center bg-white border-2 border-slate-200 rounded-xl hover:border-slate-900 transition-all text-slate-900 z-10 shadow-sm"
             disabled={isSubmitting}
@@ -330,6 +339,7 @@ export default function ModularFactoryFlow({
               {step === 'machines' ? (departmentName === 'Solid' && !selectedSolidSection ? 'Location Selection' : 'Machine Selection') : 
                step === 'location' ? 'Location Assignment' :
                step === 'work-types' ? 'Operation Protocol' :
+               step === 'shift' ? 'Work Shift Selection' :
                step === 'description' ? 'Operational Narrative' : 
                step === 'scheduling' ? 'Service Scheduling' : 'Report Logged'}
             </h1>
@@ -540,6 +550,158 @@ export default function ModularFactoryFlow({
                 ))}
               </div>
             </motion.div>
+          ) : step === 'shift' ? (
+            <motion.div 
+              key="shift"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              className="space-y-12 max-w-4xl w-full"
+            >
+              <div className="bg-slate-900 p-8 rounded-[32px] text-white flex flex-col sm:flex-row sm:items-center justify-between gap-6 border-b-4 border-singer-red shadow-2xl">
+                <div>
+                  <span className="text-[10px] font-black text-singer-red uppercase tracking-[0.2em] mb-2 block">Active Target Unit</span>
+                  <h2 className="text-3xl sm:text-4xl font-black uppercase tracking-tighter" dangerouslySetInnerHTML={{ __html: selectedMachine?.name || '' }} />
+                </div>
+                <div className="px-6 py-3 bg-white/10 rounded-2xl border border-white/20 backdrop-blur-sm">
+                  <span className="text-[10px] font-black text-white/60 uppercase tracking-widest block mb-1">Work Type</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-black uppercase tracking-widest text-singer-red">{selectedWorkType}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-10 bg-white p-8 sm:p-12 rounded-[40px] border-2 border-slate-100 shadow-2xl">
+                {/* Weekday Shifts */}
+                <div className="space-y-4">
+                  <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-2">Weekday Shifts (Monday - Friday)</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                    {[
+                      '7:30 AM - 4:30 PM',
+                      '7:30 AM - 8:30 PM',
+                      '7:30 AM - 10:30 PM',
+                      '7:30 AM - 12:30 AM',
+                      '7:30 AM - 7:30 AM'
+                    ].map((sh) => (
+                      <button
+                        key={sh}
+                        type="button"
+                        onClick={() => setSelectedShift(sh)}
+                        className={cn(
+                          "p-5 border-2 rounded-2xl text-left transition-all font-sans font-black uppercase tracking-tight relative overflow-hidden min-h-[50px] cursor-pointer",
+                          selectedShift === sh
+                            ? "border-singer-red bg-red-50/50 text-singer-red scale-[1.02]"
+                            : "border-slate-100 hover:border-slate-300 text-slate-700 bg-slate-50/20 hover:bg-white"
+                        )}
+                      >
+                        <span className="block text-sm font-black text-slate-900">{sh}</span>
+                        <span className="block text-[8px] text-slate-400 font-bold uppercase tracking-wider mt-1">WEEKDAY CYCLE</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Saturday Shifts */}
+                <div className="space-y-4">
+                  <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-2">Saturday Shifts</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                    {[
+                      '7:30 AM - 1:00 PM',
+                      '7:30 AM - 9:40 PM'
+                    ].map((sh) => (
+                      <button
+                        key={sh}
+                        type="button"
+                        onClick={() => setSelectedShift(sh)}
+                        className={cn(
+                          "p-5 border-2 rounded-2xl text-left transition-all font-sans font-black uppercase tracking-tight relative overflow-hidden min-h-[50px] cursor-pointer",
+                          selectedShift === sh
+                            ? "border-singer-red bg-red-50/50 text-singer-red scale-[1.02]"
+                            : "border-slate-100 hover:border-slate-300 text-slate-700 bg-slate-50/20 hover:bg-white"
+                        )}
+                      >
+                        <span className="block text-sm font-black text-slate-900">{sh}</span>
+                        <span className="block text-[8px] text-slate-400 font-bold uppercase tracking-wider mt-1">SATURDAY CYCLE</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Sunday Shifts */}
+                <div className="space-y-4">
+                  <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-2">Sunday Shifts</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                    {[
+                      '7:30 AM - 4:30 PM'
+                    ].map((sh) => (
+                      <button
+                        key={sh}
+                        type="button"
+                        onClick={() => setSelectedShift(sh)}
+                        className={cn(
+                          "p-5 border-2 rounded-2xl text-left transition-all font-sans font-black uppercase tracking-tight relative overflow-hidden min-h-[50px] cursor-pointer",
+                          selectedShift === sh
+                            ? "border-singer-red bg-red-50/50 text-singer-red scale-[1.02]"
+                            : "border-slate-100 hover:border-slate-300 text-slate-700 bg-slate-50/20 hover:bg-white"
+                        )}
+                      >
+                        <span className="block text-sm font-black text-slate-900">{sh}</span>
+                        <span className="block text-[8px] text-slate-400 font-bold uppercase tracking-wider mt-1">SUNDAY CYCLE</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Additional Option */}
+                <div className="space-y-4">
+                  <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-2">Additional Option</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                    {[
+                      'None Shift'
+                    ].map((sh) => (
+                      <button
+                        key={sh}
+                        type="button"
+                        onClick={() => setSelectedShift(sh)}
+                        className={cn(
+                          "p-5 border-2 rounded-2xl text-left transition-all font-sans font-black uppercase tracking-tight relative overflow-hidden min-h-[50px] cursor-pointer",
+                          selectedShift === sh
+                            ? "border-singer-red bg-red-50/50 text-singer-red scale-[1.02]"
+                            : "border-slate-100 hover:border-slate-300 text-slate-700 bg-slate-50/20 hover:bg-white"
+                        )}
+                      >
+                        <span className="block text-sm font-black text-slate-900">{sh}</span>
+                        <span className="block text-[8px] text-slate-400 font-bold uppercase tracking-wider mt-1">NO SHIFT ASSIGNED</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-8 border-t border-slate-100">
+                  <button
+                    disabled={!selectedShift}
+                    onClick={() => {
+                      if (selectedShift) {
+                        if (selectedWorkType === 'Service') {
+                          setStep('scheduling');
+                        } else {
+                          setStep('description');
+                        }
+                      }
+                    }}
+                    type="button"
+                    className={cn(
+                      "w-full sm:w-auto h-16 px-12 rounded-2xl flex items-center justify-center gap-2 border-2 text-sm font-black uppercase tracking-widest transition-all shadow-xl font-sans cursor-pointer",
+                      selectedShift
+                        ? "bg-slate-900 text-white border-slate-900 hover:bg-singer-red hover:border-singer-red"
+                        : "bg-slate-100 text-slate-400 border-slate-100 cursor-not-allowed shadow-none"
+                    )}
+                  >
+                    CONTINUE TO NEXT STEP <ChevronRight size={16} />
+                  </button>
+                </div>
+              </div>
+            </motion.div>
           ) : step === 'scheduling' ? (
             <motion.div
               key="scheduling"
@@ -593,20 +755,53 @@ export default function ModularFactoryFlow({
                         const end = endOfWeek(endOfMonth(scheduledMonth), { weekStartsOn: 1 });
                         const days = eachDayOfInterval({ start, end });
                         
-                        return days.map(day => (
-                          <button
-                            key={day.toString()}
-                            onClick={() => setScheduledDate(day)}
-                            className={cn(
-                              "aspect-square flex flex-col items-center justify-center rounded-2xl text-sm font-black transition-all relative group",
-                              !isSameMonth(day, scheduledMonth) ? "text-slate-200" : "text-slate-900",
-                              isSameDay(day, scheduledDate) ? "bg-amber-500 text-slate-900 scale-110 shadow-lg shadow-amber-500/20 z-10" : "hover:bg-slate-50",
-                              isToday(day) && !isSameDay(day, scheduledDate) && "text-singer-red after:content-[''] after:absolute after:bottom-2 after:w-1 after:h-1 after:bg-singer-red after:rounded-full"
-                            )}
-                          >
-                            {format(day, 'd')}
-                          </button>
-                        ));
+                        return days.map(day => {
+                          const holiday = getSriLankanHoliday(day);
+                          const isSun = isSunday(day);
+                          const isSelected = isSameDay(day, scheduledDate);
+                          
+                          let bgClass = "hover:bg-slate-50";
+                          let textClass = !isSameMonth(day, scheduledMonth) ? "text-slate-200" : "text-slate-900";
+                          
+                          if (isSameMonth(day, scheduledMonth)) {
+                            if (holiday) {
+                              bgClass = "bg-amber-100/80 hover:bg-amber-200 border border-amber-300";
+                              textClass = "text-amber-950 font-bold";
+                            } else if (isSun) {
+                              bgClass = "bg-blue-50 hover:bg-blue-100 border border-blue-200";
+                              textClass = "text-blue-700 font-bold";
+                            }
+                          } else {
+                            if (holiday) {
+                              bgClass = "bg-amber-50/30 border border-amber-100/30";
+                              textClass = "text-amber-300/40";
+                            } else if (isSun) {
+                              bgClass = "bg-blue-50/20 border border-blue-100/20";
+                              textClass = "text-blue-300/30";
+                            }
+                          }
+                          
+                          if (isSelected) {
+                            bgClass = "bg-amber-500 hover:bg-amber-600 shadow-lg shadow-amber-500/20 z-10 scale-110";
+                            textClass = "text-slate-900 font-black";
+                          }
+                          
+                          return (
+                            <button
+                              key={day.toString()}
+                              onClick={() => setScheduledDate(day)}
+                              title={holiday ? `${holiday.name} (${holiday.type})` : isSun ? "Sunday" : undefined}
+                              className={cn(
+                                "aspect-square flex flex-col items-center justify-center rounded-2xl text-sm font-black transition-all relative group",
+                                bgClass,
+                                textClass,
+                                isToday(day) && !isSelected && "text-singer-red after:content-[''] after:absolute after:bottom-2 after:w-1 after:h-1 after:bg-singer-red after:rounded-full"
+                              )}
+                            >
+                              {format(day, 'd')}
+                            </button>
+                          );
+                        });
                       })()}
                     </div>
                   </div>
@@ -621,6 +816,30 @@ export default function ModularFactoryFlow({
                             {format(scheduledDate, 'EEEE, MMM do')}
                           </span>
                         </div>
+                        {(() => {
+                          const holiday = getSriLankanHoliday(scheduledDate);
+                          if (holiday) {
+                            return (
+                              <div className="flex justify-between items-center bg-amber-50 border border-amber-200 px-4 py-2 rounded-xl text-amber-950 text-xs font-bold gap-2">
+                                <span className="uppercase text-[8px] tracking-widest bg-amber-200 px-1.5 py-0.5 rounded text-amber-800 shrink-0">
+                                  {holiday.type} HOLIDAY
+                                </span>
+                                <span className="text-right truncate">{holiday.name}</span>
+                              </div>
+                            );
+                          }
+                          if (isSunday(scheduledDate)) {
+                            return (
+                              <div className="flex justify-between items-center bg-blue-50 border border-blue-200 px-4 py-2 rounded-xl text-blue-950 text-xs font-bold gap-2">
+                                <span className="uppercase text-[8px] tracking-widest bg-blue-200 px-1.5 py-0.5 rounded text-blue-800 shrink-0">
+                                  WEEKEND
+                                </span>
+                                <span className="text-right">Sunday (Non-Working)</span>
+                              </div>
+                            );
+                          }
+                          return null;
+                        })()}
                         <div className="flex justify-between items-center">
                           <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-left">Unit Identity</span>
                           <span className="text-sm font-black text-slate-900 text-right" dangerouslySetInnerHTML={{ __html: selectedMachine?.name || '' }} />

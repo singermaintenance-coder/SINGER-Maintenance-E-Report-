@@ -32,9 +32,10 @@ import {
   LogOut,
   Hammer,
   Cog,
-  Paintbrush
+  Paintbrush,
+  X
 } from 'lucide-react';
-import { cn, formatTime } from '../lib/utils';
+import { cn, formatTime, formatTimeRange, calculateShiftDuration } from '../lib/utils';
 import { format } from 'date-fns';
 import { translateToEnglish } from '../services/geminiService';
 import AnalogTimePicker from './AnalogTimePicker';
@@ -75,6 +76,7 @@ export default function MaintainerWorkflow({
   onLogout, 
   machines,
   reports = [],
+  records = [],
   onUpdateReport,
   notifications = [],
   onMarkNotificationAsRead,
@@ -85,6 +87,7 @@ export default function MaintainerWorkflow({
   onLogout: () => void, 
   machines: Machine[],
   reports?: MachineReport[],
+  records?: MaintenanceRecord[],
   onUpdateReport?: (id: string, updates: Partial<MachineReport>) => Promise<void>,
   notifications?: Notification[],
   onMarkNotificationAsRead: (id: string, userId: string) => Promise<void>,
@@ -99,11 +102,105 @@ export default function MaintainerWorkflow({
   const [timeType, setTimeType] = useState<TimeType | null>('Now');
   const [startTime, setStartTime] = useState<string>('');
   const [finishTime, setFinishTime] = useState<string>('');
-  const [manualDate, setManualDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
+  const [manualStartDate, setManualStartDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
+  const [manualFinishDate, setManualFinishDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
   const [description, setDescription] = useState('');
   const [isTimerRunning, setIsTimerRunning] = useState(false);
   const [isTranslating, setIsTranslating] = useState(false);
   const [activePicker, setActivePicker] = useState<'start' | 'final' | null>(null);
+
+  const [selectedCompletedRecord, setSelectedCompletedRecord] = useState<MaintenanceRecord | null>(null);
+
+  const handleNotificationClick = (notif: Notification) => {
+    // 1. Find the associated machine
+    const matchedMachine = machines.find(m => m.id === notif.machineId);
+    if (!matchedMachine) return;
+
+    // 2. Identify the matching report (MachineReport)
+    let report = reports && notif.reportId ? reports.find(r => r.id === notif.reportId) : null;
+    
+    if (!report && reports) {
+      report = reports.find(r => 
+        r.machineId === notif.machineId && 
+        r.workType === notif.type
+      ) || null;
+    }
+
+    // 3. Check if the task is already completed (addressed)
+    if (report && report.status === 'addressed') {
+      const matchRecord = records?.find(rec => 
+        rec.machineId === notif.machineId && 
+        rec.workType === notif.type &&
+        new Date(rec.date).toDateString() === new Date(report!.createdAt).toDateString()
+      ) || records?.find(rec => 
+        rec.machineId === notif.machineId && 
+        rec.workType === notif.type
+      );
+
+      if (matchRecord) {
+        setSelectedCompletedRecord(matchRecord);
+      } else {
+        const mockRecord: MaintenanceRecord = {
+          id: report.id,
+          maintainerName: 'Maintainer',
+          role: 'Maintainer',
+          department: report.department,
+          machineId: report.machineId,
+          machineName: report.machineName,
+          workType: report.workType,
+          timeType: 'Now',
+          date: report.createdAt,
+          startTime: report.createdAt,
+          finishTime: report.createdAt,
+          duration: 0,
+          description: report.description || 'Completed Maintenance Task',
+          createdAt: report.createdAt
+        };
+        setSelectedCompletedRecord(mockRecord);
+      }
+      return;
+    }
+
+    if (!report && records) {
+      const matchRecord = records.find(rec => 
+        rec.machineId === notif.machineId && 
+        rec.workType === notif.type
+      );
+      if (matchRecord) {
+        setSelectedCompletedRecord(matchRecord);
+        return;
+      }
+    }
+
+    // 4. If the report is active/unfinished, navigate directly!
+    if (report) {
+      setDepartment(matchedMachine.department);
+      
+      if (matchedMachine.department === 'Solid') {
+        const section = getSolidSection(matchedMachine);
+        setSelectedSolidSection(section);
+      }
+
+      setMachine(matchedMachine);
+      
+      if (report.department && report.department !== matchedMachine.department) {
+        setSelectedLocation(report.department);
+      } else {
+        setSelectedLocation(null);
+      }
+
+      setWorkType(report.workType);
+      
+      // Auto transition to time stop / work completion screen 
+      setStep(4);
+
+      if (report.status === 'in-progress') {
+        setIsTimerRunning(true);
+      } else if (report.status === 'pending') {
+        setIsTimerRunning(false);
+      }
+    }
+  };
   
   const machinesInDept = useMemo(() => {
     const getPriority = (m: Machine) => {
@@ -144,11 +241,18 @@ export default function MaintainerWorkflow({
   // Initialize times for manual entry
   useEffect(() => {
     if (step === 4 && timeType === 'Previous' && !startTime) {
-      const now = new Date();
-      setStartTime(now.toISOString());
-      setFinishTime(now.toISOString());
+      const st = new Date();
+      const [syr, smo, sdy] = manualStartDate.split('-').map(Number);
+      st.setFullYear(syr, smo - 1, sdy);
+      
+      const ft = new Date();
+      const [fyr, fmo, fdy] = manualFinishDate.split('-').map(Number);
+      ft.setFullYear(fyr, fmo - 1, fdy);
+
+      setStartTime(st.toISOString());
+      setFinishTime(ft.toISOString());
     }
-  }, [step, timeType, startTime]);
+  }, [step, timeType, startTime, manualStartDate, manualFinishDate]);
 
   const pendingReportForMachine = useMemo(() => {
     if (!machine) return null;
@@ -160,12 +264,72 @@ export default function MaintainerWorkflow({
     return reports.find(r => r.machineId === machine.id && r.status === 'in-progress');
   }, [machine, reports]);
 
+  const matchedReport = useMemo(() => {
+    if (!machine) return null;
+    // 1. Look for a pending or in-progress report matching machine and workType
+    let match = reports.find(r => r.machineId === machine.id && r.workType === workType && (r.status === 'pending' || r.status === 'in-progress'));
+    if (match) return match;
+
+    // 2. Look for any pending or in-progress report for this machine
+    match = reports.find(r => r.machineId === machine.id && (r.status === 'pending' || r.status === 'in-progress'));
+    if (match) return match;
+
+    // 3. Look for any report for this machine and workType sorted by creation date descending
+    const sortedMachineWorkTypeReports = [...reports]
+      .filter(r => r.machineId === machine.id && r.workType === workType)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    if (sortedMachineWorkTypeReports.length > 0) return sortedMachineWorkTypeReports[0];
+
+    // 4. Look for any report for this machine sorted by creation date descending
+    const sortedMachineReports = [...reports]
+      .filter(r => r.machineId === machine.id)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    if (sortedMachineReports.length > 0) return sortedMachineReports[0];
+
+    return null;
+  }, [machine, workType, reports]);
+
+  const selectedShift = useMemo(() => {
+    return matchedReport?.shift || '7:30 AM - 4:30 PM';
+  }, [matchedReport]);
+
   const calculateDuration = (start: string, finish: string) => {
     if (!start || !finish) return 0;
-    const s = new Date(start).getTime();
-    const f = new Date(finish).getTime();
-    return Math.max(0, Math.floor((f - s) / (1000 * 60)));
+    const currentShift = selectedShift || 'None Shift';
+    return calculateShiftDuration(start, finish, currentShift);
   };
+
+  const isTimeInvalid = useMemo(() => {
+    if (timeType !== 'Previous' || !startTime || !finishTime) return false;
+    return new Date(finishTime).getTime() <= new Date(startTime).getTime();
+  }, [timeType, startTime, finishTime]);
+
+  // Automatically start timer / retrieve start time for Break Down records
+  useEffect(() => {
+    if (step === 4 && timeType === 'Now' && workType === 'Break Down') {
+      const originalTime = activeReport?.createdAt || pendingReportForMachine?.createdAt || matchedReport?.createdAt || new Date().toISOString();
+      if (startTime !== originalTime) {
+        setStartTime(originalTime);
+      }
+      if (!isTimerRunning) {
+        setIsTimerRunning(true);
+      }
+      
+      // Upgrade status to in-progress automatically
+      if (pendingReportForMachine && onUpdateReport) {
+        onUpdateReport(pendingReportForMachine.id, { status: 'in-progress' });
+      }
+    }
+  }, [step, timeType, workType, activeReport, pendingReportForMachine, matchedReport, startTime, isTimerRunning, onUpdateReport]);
+
+  // Clean timer when returning/leaving steps to prevent carryover
+  useEffect(() => {
+    if (step === 3) {
+      setStartTime('');
+      setFinishTime('');
+      setIsTimerRunning(false);
+    }
+  }, [step]);
 
   const handleStartNow = async () => {
     const now = new Date().toISOString();
@@ -198,11 +362,12 @@ export default function MaintainerWorkflow({
       machineName: machine.name,
       workType,
       timeType,
-      date: timeType === 'Now' ? startTime : new Date(manualDate).toISOString(),
+      date: timeType === 'Now' ? startTime : new Date(manualStartDate).toISOString(),
       startTime,
       finishTime,
       duration: calculateDuration(startTime, finishTime),
       description,
+      shift: activeReport?.shift || pendingReportForMachine?.shift || selectedShift || 'None Shift',
       createdAt: new Date().toISOString()
     };
 
@@ -286,11 +451,12 @@ export default function MaintainerWorkflow({
         machineName: machine.name,
         workType,
         timeType,
-        date: timeType === 'Now' ? startTime : new Date(manualDate).toISOString(),
+        date: timeType === 'Now' ? startTime : new Date(manualStartDate).toISOString(),
         startTime,
         finishTime,
         duration: calculateDuration(startTime, finishTime),
         description: translated,
+        shift: activeReport?.shift || pendingReportForMachine?.shift || selectedShift || 'None Shift',
         createdAt: new Date().toISOString()
       };
 
@@ -363,7 +529,7 @@ export default function MaintainerWorkflow({
               <div className="flex flex-col">
                 <div className={cn(
                   "text-[10px] font-black uppercase tracking-widest",
-                  step === s.id ? "text-singer-red" : "text-slate-500"
+                   step === s.id ? "text-singer-red" : "text-slate-500"
                 )}>
                   SYSTEM PHASE {s.id}
                 </div>
@@ -414,6 +580,8 @@ export default function MaintainerWorkflow({
             user={user} 
             onMarkRead={onMarkNotificationAsRead} 
             onDelete={onDeleteNotification}
+            reports={reports}
+            onNotificationClick={handleNotificationClick}
           />
         </div>
 
@@ -454,11 +622,11 @@ export default function MaintainerWorkflow({
               <span className="text-[10px] font-black text-slate-900 uppercase tracking-widest italic leading-none">Phase {step}</span>
               <span className={cn(
                 "text-[10px] font-black text-singer-red uppercase tracking-widest leading-none"
-              )}>{Math.round((step / 5) * 100)}%</span>
+              )}>{Math.round((step / 6) * 100)}%</span>
             </div>
             <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
               <motion.div 
-                animate={{ width: `${(step / 5) * 100}%` }}
+                animate={{ width: `${(step / 6) * 100}%` }}
                 className="bg-singer-red h-full"
               />
             </div>
@@ -523,9 +691,13 @@ export default function MaintainerWorkflow({
                                         {r.department === 'Other' ? 'OTHER' : (r.department.includes('FACTORY') ? r.department.replace(' FACTORY', '') : r.department)}
                                       </span>
                                     </div>
-                                    <span className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">
-                                      {r.workType}
-                                      {r.scheduledAt && ` • PLANNED @ ${new Date(r.scheduledAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}
+                                    <span className="text-[8px] font-bold text-slate-400 uppercase tracking-wider flex flex-wrap items-center gap-x-2">
+                                      <span className="text-singer-red font-black">{r.workType}</span>
+                                      <span>Date: {format(new Date(r.createdAt), 'yyyy-MM-dd')}</span>
+                                      <span>Time: {formatTime(r.createdAt)}</span>
+                                      {r.scheduledAt && (
+                                        <span className="text-amber-500 font-extrabold">• PLANNED</span>
+                                      )}
                                     </span>
                                   </div>
                                   <ChevronRight size={14} className="text-slate-300 group-hover:text-singer-red transition-colors" />
@@ -840,7 +1012,7 @@ export default function MaintainerWorkflow({
                   </button>
 
                   <button
-                    onClick={handleServiceAction}
+                    onClick={() => { setWorkType('Service'); setStep(4); }}
                     className={cn(
                       "group p-8 sm:p-10 bg-white border-4 rounded-[40px] text-left transition-all flex flex-col gap-8",
                       workType === 'Service' ? "border-blue-600 shadow-2xl shadow-blue-600/20" : "border-slate-50 hover:border-blue-600 hover:shadow-[30px_30px_60px_rgba(37,99,235,0.05)]"
@@ -888,10 +1060,18 @@ export default function MaintainerWorkflow({
                 key="step4" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
                 className="space-y-12 max-w-4xl"
               >
-                <header>
-                  <h1 className="text-6xl sm:text-8xl font-black text-slate-900 tracking-tighter leading-[0.8] mb-6 uppercase">TIME TYPE</h1>
-                  <div className="w-32 h-1.5 bg-singer-red mb-4"></div>
-                  <p className="text-slate-400 font-bold uppercase tracking-[0.2em] text-xs underline decoration-slate-200 underline-offset-8 decoration-4">Primary Time Extraction Phase</p>
+                <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+                  <div>
+                    <h1 className="text-6xl sm:text-8xl font-black text-slate-900 tracking-tighter leading-[0.8] mb-6 uppercase">TIME TYPE</h1>
+                    <div className="w-32 h-1.5 bg-singer-red mb-4"></div>
+                    <p className="text-slate-400 font-bold uppercase tracking-[0.2em] text-xs underline decoration-slate-200 underline-offset-8 decoration-4">Primary Time Extraction Phase</p>
+                  </div>
+                  <button 
+                    onClick={() => setStep(3)} 
+                    className="flex items-center gap-2 bg-singer-red text-white font-black uppercase text-[10px] sm:text-xs tracking-widest px-8 py-3 rounded-xl hover:bg-slate-900 transition-all shadow-lg active:scale-95 transition-all self-start sm:self-center"
+                  >
+                    <ArrowLeft size={16} /> BACK
+                  </button>
                 </header>
 
                 <div className="p-2 sm:p-3 rounded-[32px] bg-slate-200 flex gap-2">
@@ -953,7 +1133,7 @@ export default function MaintainerWorkflow({
 
                       {startTime && !finishTime && (
                         <button onClick={handleFinishNow} className="w-full bg-slate-900 text-white h-24 rounded-[24px] font-black text-2xl tracking-tighter hover:bg-singer-red shadow-2xl transition-all active:scale-95 flex items-center justify-center gap-4 uppercase italic">
-                          <Square fill="currentColor" /> FINISH
+                          <Square fill="currentColor" /> {workType === 'Break Down' ? 'STOP' : 'FINISH'}
                         </button>
                       )}
 
@@ -983,27 +1163,45 @@ export default function MaintainerWorkflow({
                     <div className="absolute top-0 right-0 p-10 text-slate-50 select-none pointer-events-none">
                       <Zap size={120} />
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 relative z-10">
-                      <div className="space-y-2">
-                        <label className="flex items-center gap-2 text-[10px] font-black text-slate-300 uppercase tracking-[0.4em] ml-6">
-                          <Calendar size={12} className="text-singer-red" /> Node Date
-                        </label>
-                        <div className="relative group">
-                          <input type="date" value={manualDate} onChange={(e) => setManualDate(e.target.value)} className="w-full p-8 bg-slate-50 border-4 border-transparent focus:border-slate-900 rounded-[24px] text-2xl font-black outline-none transition-all shadow-inner relative z-10 appearance-none" />
-                          <div className="absolute right-8 top-1/2 -translate-y-1/2 z-0 text-slate-200 group-focus-within:text-singer-red transition-colors pointer-events-none">
-                            <Calendar size={32} />
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 relative z-10">
+                      {/* START DATE & TIME SECTION */}
+                      <div className="space-y-6 p-6 rounded-[32px] bg-slate-50/50 border border-slate-100">
+                        <span className="text-[10px] font-black text-singer-red uppercase tracking-[0.3em] block ml-2">Start Assignment</span>
+                        
+                        <div className="space-y-2">
+                          <label className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-[0.4em] ml-6">
+                            <Calendar size={12} className="text-slate-300" /> Start Date
+                          </label>
+                          <div className="relative group">
+                            <input 
+                              type="date" 
+                              value={manualStartDate} 
+                              onChange={(e) => {
+                                const newDateStr = e.target.value;
+                                setManualStartDate(newDateStr);
+                                if (startTime) {
+                                  const currentST = new Date(startTime);
+                                  const [yr, mo, dy] = newDateStr.split('-').map(Number);
+                                  currentST.setFullYear(yr, mo - 1, dy);
+                                  setStartTime(currentST.toISOString());
+                                }
+                              }} 
+                              className="w-full p-8 bg-white border-4 border-slate-100 focus:border-slate-900 rounded-[24px] text-2xl font-black outline-none transition-all shadow-inner relative z-10 appearance-none" 
+                            />
+                            <div className="absolute right-8 top-1/2 -translate-y-1/2 z-0 text-slate-200 group-focus-within:text-singer-red transition-colors pointer-events-none">
+                              <Calendar size={32} />
+                            </div>
                           </div>
                         </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
+
                         <div className="space-y-2">
-                          <label className="flex items-center gap-2 text-[10px] font-black text-slate-300 uppercase tracking-[0.4em] ml-6">
-                            <Clock size={12} className="text-singer-red" /> Start Hr
+                          <label className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-[0.4em] ml-6">
+                            <Clock size={12} className="text-slate-300" /> Start Time
                           </label>
                           <div className="relative group">
                             <button 
                               onClick={() => setActivePicker('start')}
-                              className="w-full p-8 bg-slate-50 border-4 border-transparent hover:border-singer-red focus:border-slate-900 rounded-[24px] text-2xl font-black outline-none transition-all shadow-inner relative z-10 flex items-center justify-start"
+                              className="w-full p-8 bg-white border-4 border-slate-100 hover:border-singer-red focus:border-slate-900 rounded-[24px] text-2xl font-black outline-none transition-all shadow-inner relative z-10 flex items-center justify-start text-slate-800"
                             >
                               {startTime ? format(new Date(startTime), 'HH:mm') : '00:00'}
                             </button>
@@ -1012,14 +1210,46 @@ export default function MaintainerWorkflow({
                             </div>
                           </div>
                         </div>
+                      </div>
+
+                      {/* FINISH DATE & TIME SECTION */}
+                      <div className="space-y-6 p-6 rounded-[32px] bg-slate-50/50 border border-slate-100">
+                        <span className="text-[10px] font-black text-singer-red uppercase tracking-[0.3em] block ml-2">Finish Assignment</span>
+
                         <div className="space-y-2">
-                          <label className="flex items-center gap-2 text-[10px] font-black text-slate-300 uppercase tracking-[0.4em] ml-6">
-                            <Clock size={12} className="text-singer-red" /> Final Hr
+                          <label className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-[0.4em] ml-6">
+                            <Calendar size={12} className="text-slate-300" /> Finish Date
+                          </label>
+                          <div className="relative group">
+                            <input 
+                              type="date" 
+                              value={manualFinishDate} 
+                              onChange={(e) => {
+                                const newDateStr = e.target.value;
+                                setManualFinishDate(newDateStr);
+                                if (finishTime) {
+                                  const currentFT = new Date(finishTime);
+                                  const [yr, mo, dy] = newDateStr.split('-').map(Number);
+                                  currentFT.setFullYear(yr, mo - 1, dy);
+                                  setFinishTime(currentFT.toISOString());
+                                }
+                              }} 
+                              className="w-full p-8 bg-white border-4 border-slate-100 focus:border-slate-900 rounded-[24px] text-2xl font-black outline-none transition-all shadow-inner relative z-10 appearance-none" 
+                            />
+                            <div className="absolute right-8 top-1/2 -translate-y-1/2 z-0 text-slate-200 group-focus-within:text-singer-red transition-colors pointer-events-none">
+                              <Calendar size={32} />
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-[0.4em] ml-6">
+                            <Clock size={12} className="text-slate-300" /> Finish Time
                           </label>
                           <div className="relative group">
                             <button 
                               onClick={() => setActivePicker('final')}
-                              className="w-full p-8 bg-slate-50 border-4 border-transparent hover:border-singer-red focus:border-slate-900 rounded-[24px] text-2xl font-black outline-none transition-all shadow-inner relative z-10 flex items-center justify-start"
+                              className="w-full p-8 bg-white border-4 border-slate-100 hover:border-singer-red focus:border-slate-900 rounded-[24px] text-2xl font-black outline-none transition-all shadow-inner relative z-10 flex items-center justify-start text-slate-800"
                             >
                               {finishTime ? format(new Date(finishTime), 'HH:mm') : '00:00'}
                             </button>
@@ -1030,19 +1260,110 @@ export default function MaintainerWorkflow({
                         </div>
                       </div>
                     </div>
-                    
-                    {startTime && finishTime && (
-                      <div className="p-10 bg-slate-900 rounded-[32px] flex justify-between items-center text-white relative overflow-hidden group">
-                        <div className="absolute top-0 right-0 p-8 opacity-5 uppercase font-black text-9xl group-hover:scale-150 transition-transform duration-1000">T</div>
-                        <div className="relative z-10">
-                          <span className="text-[10px] font-black text-white/40 uppercase tracking-widest block mb-1">Calculated Duration</span>
-                          <span className="text-5xl font-black text-white tracking-tighter tabular-nums">{calculateDuration(startTime, finishTime)} <span className="text-singer-red italic">MIN</span></span>
+
+                    {startTime && finishTime && (() => {
+                      const startD = new Date(startTime);
+                      const finishD = new Date(finishTime);
+                      const totalDiffMs = finishD.getTime() - startD.getTime();
+                      const totalDiffMins = totalDiffMs > 0 ? Math.floor(totalDiffMs / 60000) : 0;
+                      const totalDiffHours = (totalDiffMins / 60).toFixed(1);
+
+                      const actualMins = calculateDuration(startTime, finishTime);
+                      const actualHours = (actualMins / 60).toFixed(1);
+
+                      return (
+                        <div className="space-y-6">
+                          {isTimeInvalid && (
+                            <motion.div 
+                              initial={{ opacity: 0, y: -10 }} 
+                              animate={{ opacity: 1, y: 0 }} 
+                              className="p-8 bg-amber-50 border-2 border-amber-300 rounded-[28px] flex items-center gap-4 text-amber-800"
+                            >
+                              <AlertTriangle className="text-amber-500 shrink-0" size={32} />
+                              <div className="text-left">
+                                <h4 className="font-bold text-sm tracking-tight text-amber-950">Validation Warning</h4>
+                                <p className="text-xs text-amber-700 font-medium leading-relaxed mt-0.5">
+                                  Finish Date/Time must be later than Start Date/Time. Please check your selections.
+                                </p>
+                              </div>
+                            </motion.div>
+                          )}
+
+                          {/* Comprehensive Calculation Breakdown */}
+                          <div className="bg-slate-50 border border-slate-100 p-8 rounded-[32px] space-y-6 text-left">
+                            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] block border-b border-slate-200/60 pb-3">DOWNTIME & DURATION ANALYSIS</h4>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 font-sans">
+                              {/* Date Ranges */}
+                              <div className="space-y-4">
+                                <div className="space-y-1">
+                                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Entered Start Date/Time</span>
+                                  <span className="text-sm font-black text-slate-800 font-mono">
+                                    {format(startD, 'dd MMM yyyy, hh:mm a')}
+                                  </span>
+                                </div>
+                                <div className="space-y-1">
+                                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Entered Finish Date/Time</span>
+                                  <span className="text-sm font-black text-slate-800 font-mono">
+                                    {format(finishD, 'dd MMM yyyy, hh:mm a')}
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Breakdown Statistics */}
+                              <div className="space-y-4">
+                                <div className="space-y-1">
+                                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Raw Calendar Period</span>
+                                  <span className="text-sm font-bold text-slate-500 font-mono">
+                                    {totalDiffMins} mins ({totalDiffHours} hrs)
+                                  </span>
+                                </div>
+                                <div className="space-y-1">
+                                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Applied Shift Rule</span>
+                                  <span className="text-xs font-bold text-singer-red font-mono bg-red-50 border border-red-100 px-2 py-0.5 rounded inline-block">
+                                    {selectedShift}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="pt-4 border-t border-slate-200/60 flex flex-col sm:flex-row sm:items-center justify-between gap-4 font-sans">
+                              <div>
+                                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block">Actual Maintenance Working Duration</span>
+                                <p className="text-xs text-slate-500 font-medium mt-1">Non-working hours and overnight factory closures are automatically excluded from this duration.</p>
+                              </div>
+                              <div className="text-right shrink-0">
+                                <span className="text-2xl font-black text-slate-900 font-mono italic">
+                                  {actualHours} <span className="text-xs uppercase not-italic text-slate-400 font-bold">hrs</span>
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="p-10 bg-slate-900 rounded-[32px] flex justify-between items-center text-white relative overflow-hidden group">
+                            <div className="absolute top-0 right-0 p-8 opacity-5 uppercase font-black text-9xl group-hover:scale-150 transition-transform duration-1000">T</div>
+                            <div className="relative z-10">
+                              <span className="text-[10px] font-black text-white/40 uppercase tracking-widest block mb-1">Calculated Duration</span>
+                              <span className="text-5xl font-black text-white tracking-tighter tabular-nums">{actualMins} <span className="text-singer-red italic">MIN</span></span>
+                            </div>
+                            <button 
+                              disabled={isTimeInvalid}
+                              onClick={() => {
+                                if (!isTimeInvalid) setStep(5);
+                              }} 
+                              className={cn(
+                                "relative z-10 w-20 h-20 p-0 rounded-full flex items-center justify-center transition-all shadow-xl",
+                                isTimeInvalid 
+                                  ? "bg-slate-700 text-slate-500 cursor-not-allowed shadow-none" 
+                                  : "bg-singer-red text-white hover:scale-110 active:scale-90 shadow-singer-red/20"
+                              )}
+                            >
+                              <CheckCircle2 size={40} />
+                            </button>
+                          </div>
                         </div>
-                        <button onClick={() => setStep(5)} className="relative z-10 w-20 h-20 bg-singer-red text-white p-0 rounded-full flex items-center justify-center hover:scale-110 active:scale-90 transition-all shadow-xl shadow-singer-red/20">
-                          <CheckCircle2 size={40} />
-                        </button>
-                      </div>
-                    )}
+                      );
+                    })()}
                   </div>
                 )}
               </motion.div>
@@ -1115,12 +1436,119 @@ export default function MaintainerWorkflow({
                 onClose={() => setActivePicker(null)}
                 onChange={(val) => {
                   const [hours, minutes] = val.split(':');
-                  const d = new Date(manualDate);
-                  d.setHours(parseInt(hours), parseInt(minutes));
-                  if (activePicker === 'start') setStartTime(d.toISOString());
-                  else setFinishTime(d.toISOString());
+                  if (activePicker === 'start') {
+                    const d = new Date(startTime || new Date());
+                    const [yr, mo, dy] = manualStartDate.split('-').map(Number);
+                    d.setFullYear(yr, mo - 1, dy);
+                    d.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+                    setStartTime(d.toISOString());
+                  } else {
+                    const d = new Date(finishTime || new Date());
+                    const [yr, mo, dy] = manualFinishDate.split('-').map(Number);
+                    d.setFullYear(yr, mo - 1, dy);
+                    d.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+                    setFinishTime(d.toISOString());
+                  }
                 }}
               />
+            )}
+          </AnimatePresence>
+
+          {/* Read-Only Completed Record Modal */}
+          <AnimatePresence>
+            {selectedCompletedRecord && (
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[100] flex items-center justify-center p-4"
+              >
+                <motion.div 
+                  initial={{ scale: 0.95, y: 30 }}
+                  animate={{ scale: 1, y: 0 }}
+                  exit={{ scale: 0.95, y: 30 }}
+                  className="bg-white rounded-[40px] border-4 border-slate-900 shadow-[0_32px_64px_-12px_rgba(0,0,0,0.5)] w-full max-w-2xl overflow-hidden flex flex-col"
+                >
+                  {/* Modal Header */}
+                  <div className="bg-slate-900 p-8 text-white flex justify-between items-center relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-8 opacity-10 text-white pointer-events-none select-none">
+                      <CheckCircle2 size={120} />
+                    </div>
+                    <div className="relative z-10">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="px-3 py-1 bg-green-500 text-white rounded-full text-[8.5px] font-black uppercase tracking-[0.2em]">Closed / Resolved</span>
+                        <span className="px-3 py-1 bg-white/10 text-white/80 rounded-full text-[8.5px] font-black uppercase tracking-[0.2em] font-mono">Record ID: {selectedCompletedRecord.id}</span>
+                      </div>
+                      <h2 className="text-3xl font-black uppercase tracking-tighter italic leading-none">Completed Task Log</h2>
+                      <p className="text-[9px] font-bold text-white/40 uppercase tracking-[0.3em] mt-2">Singer Maintenance Archives</p>
+                    </div>
+                    <button 
+                      onClick={() => setSelectedCompletedRecord(null)}
+                      className="p-3 bg-white/10 hover:bg-singer-red hover:text-white rounded-2xl transition-all z-20"
+                    >
+                      <X size={20} />
+                    </button>
+                  </div>
+
+                  {/* Modal Scrollable Body */}
+                  <div className="p-8 space-y-6 max-h-[60vh] overflow-y-auto no-scrollbar bg-slate-50">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {/* Machine Details */}
+                      <div className="p-5 bg-white border border-slate-100 rounded-2xl">
+                        <span className="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1 select-none">Target Asset / Node</span>
+                        <span className="font-mono text-slate-900 font-bold text-sm block" dangerouslySetInnerHTML={{ __html: selectedCompletedRecord.machineName }} />
+                        <span className="block text-[9px] font-bold text-slate-400 mt-1 uppercase tracking-wider">{selectedCompletedRecord.department} Division</span>
+                      </div>
+
+                      {/* Work Category */}
+                      <div className="p-5 bg-white border border-slate-100 rounded-2xl">
+                        <span className="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1 select-none">Incident Category</span>
+                        <span className="font-black text-singer-red text-base uppercase block tracking-wider italic">{selectedCompletedRecord.workType}</span>
+                        <span className="block text-[9px] font-bold text-slate-400 mt-1 uppercase tracking-wider">Priority Resolution Code</span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      {/* Maintainer */}
+                      <div className="p-4 bg-white border border-slate-100 rounded-xl">
+                        <span className="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1 select-none">Assigned Operator</span>
+                        <span className="text-slate-800 font-bold text-xs uppercase block">{selectedCompletedRecord.maintainerName}</span>
+                        <span className="block text-[9px] text-slate-400 uppercase tracking-wider">{selectedCompletedRecord.role} ID</span>
+                      </div>
+
+                      {/* Date */}
+                      <div className="p-4 bg-white border border-slate-100 rounded-xl">
+                        <span className="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1 select-none">Filing Timestamp</span>
+                        <span className="text-slate-800 font-mono text-xs font-bold block">{selectedCompletedRecord.date?.split('T')[0] || selectedCompletedRecord.date}</span>
+                      </div>
+
+                      {/* Duration */}
+                      <div className="p-4 bg-white border border-slate-100 rounded-xl">
+                        <span className="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1 select-none">Activity Duration</span>
+                        <span className="text-slate-800 font-black text-base italic block">{selectedCompletedRecord.duration} <span className="font-sans text-xs uppercase text-slate-400 not-italic font-medium">min</span></span>
+                      </div>
+                    </div>
+
+                    {/* Task Description */}
+                    <div className="p-6 bg-white border border-slate-100 rounded-2xl space-y-2">
+                      <span className="block text-[8px] font-black text-slate-400 uppercase tracking-widest select-none">Service Action Log / Narrative</span>
+                      <p className="text-slate-700 text-xs font-normal leading-relaxed whitespace-pre-wrap uppercase tracking-tight">
+                        {selectedCompletedRecord.description || 'No maintenance summary provided.'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Modal Footer */}
+                  <div className="p-6 bg-slate-100 border-t border-slate-200 flex justify-end gap-3 rounded-b-[40px]">
+                    <button 
+                      onClick={() => setSelectedCompletedRecord(null)}
+                      className="flex-1 py-4 bg-slate-900 hover:bg-singer-red text-white text-[10px] font-black uppercase tracking-widest rounded-2xl transition-all shadow-md flex items-center justify-center gap-2"
+                    >
+                      Confirm & Dismiss Registry
+                    </button>
+                  </div>
+                </motion.div>
+              </motion.div>
             )}
           </AnimatePresence>
         </div>

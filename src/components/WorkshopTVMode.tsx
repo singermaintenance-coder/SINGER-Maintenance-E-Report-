@@ -19,7 +19,8 @@ import {
   Tv2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { cn } from '../lib/utils';
+import { cn, formatTime } from '../lib/utils';
+import { format } from 'date-fns';
 import { Machine, MachineReport, MaintenanceRecord } from '../types';
 
 interface WorkshopTVModeProps {
@@ -813,6 +814,18 @@ export default function WorkshopTVMode({
                               </p>
                             </div>
 
+                            {/* Date and Time block matching user instructions */}
+                            <div className="grid grid-cols-2 gap-4 p-4 rounded-2xl bg-slate-900 border border-slate-800 text-[10px] font-bold text-slate-400">
+                              <div>
+                                <span className="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1 select-none">Date</span>
+                                <span className="font-mono text-white text-xs font-black">{format(new Date((currentItem as MachineReport).createdAt), 'yyyy-MM-dd')}</span>
+                              </div>
+                              <div>
+                                <span className="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1 select-none">Time</span>
+                                <span className="font-mono text-white text-xs font-black">{formatTime((currentItem as MachineReport).createdAt)}</span>
+                              </div>
+                            </div>
+
                             <div className="grid grid-cols-2 gap-4 pt-2 border-t border-slate-900">
                               <div className="space-y-0.5">
                                 <span className="block text-[9px] font-black text-slate-500 uppercase tracking-widest">WORK CATEGORY</span>
@@ -1163,6 +1176,18 @@ export default function WorkshopTVMode({
                             <div className={cn("inline-flex items-center gap-2 px-4 py-2 rounded-xl border text-xs sm:text-sm font-black uppercase tracking-wider", priorityColor)}>
                               <span className="w-2.5 h-2.5 bg-current rounded-full animate-pulse" />
                               {priorityLabel}
+                            </div>
+                          </div>
+
+                          {/* Date and Time block matching user instructions */}
+                          <div className="mt-4 grid grid-cols-2 gap-4">
+                            <div>
+                              <span className="block text-xs font-black text-slate-500 uppercase tracking-widest mb-1">DATE</span>
+                              <span className="font-mono text-white text-sm font-black">{format(new Date(activeAlert.createdAt), 'yyyy-MM-dd')}</span>
+                            </div>
+                            <div>
+                              <span className="block text-xs font-black text-slate-500 uppercase tracking-widest mb-1">TIME</span>
+                              <span className="font-mono text-white text-sm font-black">{formatTime(activeAlert.createdAt)}</span>
                             </div>
                           </div>
                         </div>

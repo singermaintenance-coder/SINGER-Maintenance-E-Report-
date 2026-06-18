@@ -20,7 +20,9 @@ async function startServer() {
     try {
       const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey) {
-        throw new Error("GEMINI_API_KEY environment variable is not defined on the server.");
+        console.warn("[Backend] GEMINI_API_KEY is missing. Falling back to original text.");
+        res.json({ translation: text, fallback: true, warning: "API Key missing" });
+        return;
       }
 
       console.log(`[Backend] Translating description: "${text.substring(0, 50)}..."`);
@@ -32,12 +34,8 @@ async function startServer() {
           }
         }
       });
-      const response = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
-        contents: `Input Text to translate:
-"${text}"`,
-        config: {
-          systemInstruction: `You are an expert technical translator specialized in industrial maintenance and factory report analysis. Your task is to translate user inputs into clear, professional, and standard English for maintenance reports and commits.
+
+      const systemInstruction = `You are an expert technical translator specialized in industrial maintenance and factory report analysis. Your task is to translate user inputs into clear, professional, and standard English for maintenance reports and commits.
 
 You MUST follow these strict rules:
 1. INPUT CLASSIFICATION & DETECTION:
@@ -53,17 +51,53 @@ You MUST follow these strict rules:
 
 3. OUTPUT CONSTRAINTS:
    - Output ONLY the translated text (or the original text if it was already in standard English).
-   - STRICTLY FORBIDDEN: Do NOT include any introductory phrases (like "Here is the translation:"), footnotes, quotes, explanations, markdown formatting, or polite fluff. Just return the raw text.`,
-          temperature: 0.1,
-        }
-      });
+   - STRICTLY FORBIDDEN: Do NOT include any introductory phrases (like "Here is the translation:"), footnotes, quotes, explanations, markdown formatting, or polite fluff. Just return the raw text.`;
 
-      const translatedText = response.text?.trim() || text;
-      console.log(`[Backend] Transformed to: "${translatedText.substring(0, 50)}..."`);
+      const executeWithRetry = async (modelName: string, maxAttempts = 3): Promise<string> => {
+        let attempt = 0;
+        while (attempt < maxAttempts) {
+          try {
+            const response = await ai.models.generateContent({
+              model: modelName,
+              contents: `Input Text to translate:\n"${text}"`,
+              config: {
+                systemInstruction,
+                temperature: 0.1,
+              }
+            });
+            return response.text?.trim() || text;
+          } catch (err: any) {
+            attempt++;
+            if (attempt >= maxAttempts) {
+              throw err;
+            }
+            const delay = Math.pow(2, attempt) * 150 + Math.random() * 50;
+            console.log(`[Backend] Model ${modelName} reported service busy. Retrying (${attempt}/${maxAttempts}) in ${Math.round(delay)}ms...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+          }
+        }
+        return text;
+      };
+
+      let translatedText = text;
+      try {
+        try {
+          translatedText = await executeWithRetry("gemini-3.5-flash", 3);
+          console.log(`[Backend] Translated description successfully`);
+        } catch (firstError: any) {
+          console.log(`[Backend] Primary translation model busy, selecting alternative gemini-3.1-flash-lite...`);
+          translatedText = await executeWithRetry("gemini-3.1-flash-lite", 2);
+          console.log(`[Backend] Translated description successfully via alternate`);
+        }
+      } catch (genError: any) {
+        console.log("[Backend] Dynamic translation skipped. Retaining original description.");
+        translatedText = text;
+      }
+
       res.json({ translation: translatedText });
     } catch (error: any) {
-      console.error("[Backend] Translation error:", error);
-      res.status(500).json({ error: error.message || "Failed to translate." });
+      console.error("[Backend] General translation route error:", error);
+      res.json({ translation: text, fallback: true, error: error.message || "Failed to translate." });
     }
   });
 

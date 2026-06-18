@@ -17,6 +17,7 @@
         "finishTime": { "type": "string", "format": "date-time" },
         "duration": { "type": "number" },
         "description": { "type": "string" },
+        "shift": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["maintainerName", "role", "department", "machineId", "machineName", "workType", "timeType", "date", "startTime", "finishTime", "duration", "description", "createdAt"]
@@ -32,7 +33,9 @@
         "workType": { "enum": ["Repair", "Service", "Break Down"] },
         "description": { "type": "string" },
         "status": { "enum": ["pending", "addressed"] },
-        "createdAt": { "type": "string", "format": "date-time" }
+        "createdAt": { "type": "string", "format": "date-time" },
+        "shift": { "type": "string" },
+        "scheduledAt": { "type": "string", "format": "date-time" }
       },
       "required": ["department", "machineId", "machineName", "workType", "description", "status", "createdAt"]
     },

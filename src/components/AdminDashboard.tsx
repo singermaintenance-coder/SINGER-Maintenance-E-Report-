@@ -3,7 +3,7 @@ import { MaintenanceRecord, User, Department, Machine } from '../types';
 import { DEPARTMENTS, INITIAL_USERS } from '../constants';
 import { motion } from 'motion/react';
 import { Users, LayoutGrid, FileText, Plus, Trash2, Edit2, Search, Settings, LogOut, ChevronLeft, ImagePlus, X } from 'lucide-react';
-import { formatTime, formatDate, cn } from '../lib/utils';
+import { formatTime, formatDate, cn, formatTimeRange } from '../lib/utils';
 
 export default function AdminDashboard({ 
   records, 
@@ -144,7 +144,7 @@ export default function AdminDashboard({
                         <td className="px-6 sm:px-10 py-6 sm:py-8 whitespace-nowrap">
                           <div className="flex flex-col">
                             <span className="text-sm sm:text-base font-black text-slate-800 tracking-tight">{formatDate(record.date)}</span>
-                            <span className="text-[9px] sm:text-[10px] font-mono font-bold text-slate-400 uppercase tracking-widest">{formatTime(record.startTime)} • {formatTime(record.finishTime)}</span>
+                            <span className="text-[9px] sm:text-[10px] font-mono font-bold text-slate-400 uppercase tracking-widest">{formatTimeRange(record.startTime, record.finishTime)}</span>
                           </div>
                         </td>
                         <td className="px-6 sm:px-10 py-6 sm:py-8 whitespace-nowrap">
@@ -162,6 +162,9 @@ export default function AdminDashboard({
                           <div className="flex flex-col">
                             <span className="text-xs sm:text-sm font-black text-slate-900 uppercase tracking-tighter underline decoration-singer-red decoration-2 underline-offset-4" dangerouslySetInnerHTML={{ __html: record.machineName }} />
                             <span className="text-[9px] sm:text-[10px] font-bold text-singer-red uppercase tracking-[0.1em] mt-1">{record.workType}</span>
+                            {record.shift && (
+                              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mt-0.5">Shift: {record.shift}</span>
+                            )}
                           </div>
                         </td>
                         <td className="px-6 sm:px-10 py-6 sm:py-8 whitespace-nowrap">

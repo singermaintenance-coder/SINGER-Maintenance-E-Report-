@@ -34,6 +34,7 @@ export interface MaintenanceRecord {
   finishTime: string; // ISO string
   duration: number; // in minutes
   description: string;
+  shift?: string; // e.g. "7:30 AM - 4:30 PM"
   createdAt: string; // ISO string
 }
 
@@ -47,6 +48,7 @@ export interface MachineReport {
   status: 'pending' | 'in-progress' | 'addressed';
   createdAt: string; // ISO string
   scheduledAt?: string; // ISO string
+  shift?: string; // e.g. "7:30 AM - 4:30 PM"
 }
 
 export interface Notification {
@@ -59,4 +61,5 @@ export interface Notification {
   machineName: string;
   createdAt: string;
   readBy: string[]; // ids of users who have read it
+  reportId?: string;
 }

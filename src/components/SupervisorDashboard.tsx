@@ -9,7 +9,7 @@ import {
   Trash2, AlertCircle, Loader2, Hammer, Cog, Paintbrush, ArrowLeft, TrendingUp, Gauge, Clock
 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, addMonths, subMonths, isToday, startOfYear, endOfYear, eachMonthOfInterval, isSameMonth } from 'date-fns';
-import { cn, formatDate, formatTime } from '../lib/utils';
+import { cn, formatDate, formatTime, formatTimeRange, formatDateTime, getSriLankanHoliday, isSunday } from '../lib/utils';
 import { translateToEnglish } from '../services/geminiService';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
 import NotificationTray from './NotificationTray';
@@ -233,8 +233,8 @@ export default function SupervisorDashboard({
       r.department,
       r.machineName.replace(/<br\s*\/?>/gi, ' '),
       r.workType,
-      formatTime(r.startTime),
-      formatTime(r.finishTime),
+      formatDateTime(r.startTime),
+      formatDateTime(r.finishTime),
       `${r.duration}m`,
       r.description.replace(/,/g, ';')
     ]);
@@ -270,12 +270,6 @@ export default function SupervisorDashboard({
           <p className="mt-4 sm:mt-6 text-slate-400 font-bold uppercase tracking-[0.2em] sm:tracking-[0.3em] text-[8px] sm:text-[10px]">Division Oversight & Performance Tracking</p>
         </div>
         <div className="flex flex-col sm:flex-row items-center gap-4 w-full lg:w-auto">
-          <NotificationTray 
-            notifications={notifications} 
-            user={{ id: 'supervisor-1', name: 'Supervisor', role: 'Supervisor' }} 
-            onMarkRead={onMarkNotificationAsRead} 
-            onDelete={onDeleteNotification}
-          />
           <div className="flex bg-white p-1.5 rounded-2xl border-2 border-slate-900 shadow-lg overflow-x-auto no-scrollbar w-full sm:w-auto">
             <button
               onClick={() => setActiveTab('pending')}
@@ -410,13 +404,29 @@ export default function SupervisorDashboard({
                     {days.map(day => {
                       const hasPending = reports.some(r => r.status === 'pending' && isSameDay(new Date(r.createdAt), day));
                       const isSelected = selectedDate && isSameDay(day, selectedDate);
+                      const holiday = getSriLankanHoliday(day);
+                      const isSun = isSunday(day);
+
+                      let bgClass = "hover:bg-slate-50 text-slate-700";
+                      
+                      if (holiday) {
+                        bgClass = "bg-amber-100 hover:bg-amber-200 text-amber-950 font-bold border border-amber-300";
+                      } else if (isSun) {
+                        bgClass = "bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold border border-blue-200";
+                      }
+
+                      if (isSelected) {
+                        bgClass = "bg-singer-red text-white shadow-lg sm:shadow-xl shadow-singer-red/20 scale-105 sm:scale-110 z-10";
+                      }
+
                       return (
                         <button
                           key={day.toString()}
                           onClick={() => setSelectedDate(day)}
+                          title={holiday ? `${holiday.name} (${holiday.type})` : isSun ? "Sunday" : undefined}
                           className={cn(
                             "relative flex items-center justify-center aspect-square rounded-xl sm:rounded-2xl text-sm sm:text-base font-black transition-all",
-                            isSelected ? "bg-singer-red text-white shadow-lg sm:shadow-xl shadow-singer-red/20 scale-105 sm:scale-110 z-10" : "hover:bg-slate-50 text-slate-700",
+                            bgClass,
                             isToday(day) && !isSelected && "ring-2 ring-singer-red/20",
                           )}
                         >
@@ -427,6 +437,18 @@ export default function SupervisorDashboard({
                         </button>
                       );
                     })}
+                  </div>
+
+                  {/* Calendar Color Legend */}
+                  <div className="mt-6 pt-6 border-t border-slate-100 flex items-center justify-center gap-6 text-[10px] font-black uppercase tracking-wider relative z-10">
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-3.5 h-3.5 rounded-lg bg-blue-50 border border-blue-200 block" />
+                      <span className="text-slate-500">Sunday (Blue)</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-3.5 h-3.5 rounded-lg bg-amber-100 border border-amber-300 block" />
+                      <span className="text-slate-500">Holiday (Yellow)</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -503,12 +525,12 @@ export default function SupervisorDashboard({
                           <div className="absolute top-0 right-0 p-6 opacity-5 text-slate-900 text-7xl font-black italic select-none">
                             !
                           </div>
-                          <div className="flex justify-between items-start mb-6 relative z-10">
+                          <div className="flex justify-between items-start mb-4 relative z-10">
                             <div className="space-y-1">
                               <span className="bg-singer-red text-white px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest">
                                 {report.workType}
                               </span>
-                              <h3 className="text-2xl font-black text-slate-900 leading-tight uppercase tracking-tighter" dangerouslySetInnerHTML={{ __html: report.machineName || 'Unknown Machine' }} />
+                              <h3 className="text-2xl font-black text-slate-900 leading-tight uppercase tracking-tighter mt-1" dangerouslySetInnerHTML={{ __html: report.machineName || 'Unknown Machine' }} />
                             </div>
                             <div className="flex gap-2">
                               {editingReportId === report.id ? (
@@ -582,6 +604,30 @@ export default function SupervisorDashboard({
                               )}
                             </div>
                           </div>
+
+                          {/* Record Creation Date and Time Metadata Block */}
+                          <div className="grid grid-cols-2 gap-4 mb-4 bg-amber-50 border-2 border-amber-200 p-4 rounded-[20px] relative z-10 shadow-sm">
+                            <div>
+                              <span className="block text-[9px] font-black uppercase text-amber-800 tracking-wider mb-0.5 leading-none">Date</span>
+                              <span className="block font-mono font-black text-slate-900 text-sm">
+                                {format(new Date(report.createdAt), 'yyyy-MM-dd')}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="block text-[9px] font-black uppercase text-amber-800 tracking-wider mb-0.5 leading-none">Time</span>
+                              <span className="block font-mono font-black text-slate-900 text-sm font-bold">
+                                {formatTime(report.createdAt)}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Department Display */}
+                          <div className="flex items-center gap-2 mb-4 text-xs font-bold text-slate-500 relative z-10">
+                            <span className="uppercase tracking-wider text-[9px] text-slate-400">Department:</span>
+                            <span className="font-black text-slate-900 bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200">
+                              {report.department}
+                            </span>
+                          </div>
                           
                           <div className="bg-slate-50 rounded-[24px] p-6 mb-6 relative z-10 border-2 border-transparent group-hover:border-slate-100 transition-colors">
                             {editingReportId === report.id ? (
@@ -598,16 +644,30 @@ export default function SupervisorDashboard({
                                   className="w-full bg-white border-2 border-slate-200 rounded-xl p-4 font-sans text-base focus:border-singer-red outline-none min-h-[100px] resize-none"
                                   autoFocus
                                 />
+                                {report.shift && report.shift !== 'None Shift' && (
+                                  <div className="pt-2 border-t border-slate-200/60 flex items-center gap-2 text-xs font-bold text-slate-500">
+                                    <span className="uppercase tracking-wider text-[10px] text-slate-400">Work Shift:</span>
+                                    <span className="font-mono bg-slate-200/60 px-2.5 py-0.5 rounded text-slate-700">{report.shift}</span>
+                                  </div>
+                                )}
                               </div>
                             ) : (
-                              <p className="text-base font-bold text-slate-600 italic leading-relaxed">"{report.description}"</p>
+                              <div className="space-y-3">
+                                <p className="text-base font-bold text-slate-600 italic leading-relaxed">"{report.description}"</p>
+                                {report.shift && report.shift !== 'None Shift' && (
+                                  <div className="pt-2 border-t border-slate-200/60 flex items-center gap-2 text-xs font-bold text-slate-500">
+                                    <span className="uppercase tracking-wider text-[10px] text-slate-400">Work Shift:</span>
+                                    <span className="font-mono bg-slate-200/60 px-2.5 py-0.5 rounded text-slate-700">{report.shift}</span>
+                                  </div>
+                                )}
+                              </div>
                             )}
                           </div>
 
                           <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-slate-300 relative z-10">
                             <div className="flex items-center gap-2">
                               <div className="w-1.5 h-1.5 bg-singer-red rounded-full animate-pulse" />
-                              Logged: {formatTime(report.createdAt)}
+                              Logged: {format(new Date(report.createdAt), 'yyyy-MM-dd')} @ {formatTime(report.createdAt)}
                             </div>
                             <span>ID: {report.id.toUpperCase()}</span>
                           </div>
@@ -663,13 +723,29 @@ export default function SupervisorDashboard({
                     {days.map(day => {
                       const hasRecords = records.some(r => isSameDay(new Date(r.date), day));
                       const isSelected = selectedDate && isSameDay(day, selectedDate);
+                      const holiday = getSriLankanHoliday(day);
+                      const isSun = isSunday(day);
+
+                      let bgClass = "hover:bg-slate-50 text-slate-700";
+                      
+                      if (holiday) {
+                        bgClass = "bg-amber-100 hover:bg-amber-200 text-amber-950 font-bold border border-amber-300";
+                      } else if (isSun) {
+                        bgClass = "bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold border border-blue-200";
+                      }
+
+                      if (isSelected) {
+                        bgClass = "bg-singer-red text-white shadow-lg sm:shadow-xl shadow-singer-red/20 scale-105 sm:scale-110 z-10";
+                      }
+
                       return (
                         <button
                           key={day.toString()}
                           onClick={() => setSelectedDate(day)}
+                          title={holiday ? `${holiday.name} (${holiday.type})` : isSun ? "Sunday" : undefined}
                           className={cn(
                             "relative flex items-center justify-center aspect-square rounded-xl sm:rounded-2xl text-sm sm:text-base font-black transition-all",
-                            isSelected ? "bg-singer-red text-white shadow-lg sm:shadow-xl shadow-singer-red/20 scale-105 sm:scale-110 z-10" : "hover:bg-slate-50 text-slate-700",
+                            bgClass,
                             isToday(day) && !isSelected && "ring-2 ring-singer-red/20",
                           )}
                         >
@@ -680,6 +756,18 @@ export default function SupervisorDashboard({
                         </button>
                       );
                     })}
+                  </div>
+
+                  {/* Calendar Color Legend */}
+                  <div className="mt-6 pt-6 border-t border-slate-100 flex items-center justify-center gap-6 text-[10px] font-black uppercase tracking-wider relative z-10">
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-3.5 h-3.5 rounded-lg bg-blue-50 border border-blue-200 block" />
+                      <span className="text-slate-500">Sunday (Blue)</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-3.5 h-3.5 rounded-lg bg-amber-100 border border-amber-300 block" />
+                      <span className="text-slate-500">Holiday (Yellow)</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -729,7 +817,29 @@ export default function SupervisorDashboard({
                       <h2 className="text-3xl sm:text-5xl font-black text-slate-900 tracking-tighter uppercase italic">
                         {format(selectedDate, 'MMM do')}
                       </h2>
-                      <p className="text-slate-400 font-bold uppercase text-[9px] sm:text-[10px] tracking-widest">{format(selectedDate, 'EEEE, yyyy')}</p>
+                      <div className="flex flex-wrap items-center gap-2 mt-1">
+                        <p className="text-slate-400 font-bold uppercase text-[9px] sm:text-[10px] tracking-widest leading-none">
+                          {format(selectedDate, 'EEEE, yyyy')}
+                        </p>
+                        {(() => {
+                          const holiday = getSriLankanHoliday(selectedDate);
+                          if (holiday) {
+                            return (
+                              <span className="px-2 py-0.5 text-[8px] font-black tracking-widest uppercase bg-amber-100 text-amber-800 border border-amber-200 rounded leading-none">
+                                {holiday.name} ({holiday.type})
+                              </span>
+                            );
+                          }
+                          if (isSunday(selectedDate)) {
+                            return (
+                              <span className="px-2 py-0.5 text-[8px] font-black tracking-widest uppercase bg-blue-50 text-blue-800 border border-blue-200 rounded leading-none">
+                                Sunday (Non-Working)
+                              </span>
+                            );
+                          }
+                          return null;
+                        })()}
+                      </div>
                     </div>
                     <div className="flex items-center gap-4">
                       <div className="flex items-baseline gap-2">
@@ -917,8 +1027,11 @@ export default function SupervisorDashboard({
                               </div>
                               
                               <div className="text-right">
-                                <div className="text-[9px] sm:text-[10px] font-black text-slate-300 uppercase tracking-widest mb-1">{formatTime(record.startTime)} — {formatTime(record.finishTime)}</div>
+                                <div className="text-[9px] sm:text-[10px] font-black text-slate-300 uppercase tracking-widest mb-1">{formatTimeRange(record.startTime, record.finishTime)}</div>
                                 <div className="text-[10px] sm:text-sm font-black text-slate-900 uppercase italic tracking-tight">LOGGED BY {record.maintainerName}</div>
+                                {record.shift && (
+                                  <div className="text-[9px] font-black text-singer-red uppercase tracking-widest mt-1">SHIFT: {record.shift}</div>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -1530,6 +1643,9 @@ export default function SupervisorDashboard({
                                         {record.workType}
                                       </span>
                                       <span className="text-[10px] font-bold text-slate-400 uppercase">{formatDate(record.date)}</span>
+                                      {record.shift && (
+                                        <span className="text-[9px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded uppercase tracking-wider">{record.shift}</span>
+                                      )}
                                     </div>
                                     <p className="text-xs font-semibold text-slate-700 italic">" {record.description} "</p>
                                   </div>

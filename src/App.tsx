@@ -280,7 +280,8 @@ export default function App() {
         machineId: newReport.machineId,
         machineName: cleanMachineName,
         createdAt: new Date().toISOString(),
-        readBy: []
+        readBy: [],
+        reportId: newReport.id
       };
 
       await setDoc(doc(db, 'notifications', notifId), newNotif);
@@ -334,7 +335,8 @@ export default function App() {
             machineId: report.machineId,
             machineName: cleanMachineName,
             createdAt: new Date().toISOString(),
-            readBy: []
+            readBy: [],
+            reportId: report.id
           };
 
           await setDoc(doc(db, 'notifications', notifId), newNotif);
@@ -510,6 +512,7 @@ export default function App() {
                   onLogout={handleLogout} 
                   machines={machines}
                   reports={reports}
+                  records={records}
                   onUpdateReport={updateReport}
                   notifications={notifications}
                   onMarkNotificationAsRead={markNotificationAsRead}

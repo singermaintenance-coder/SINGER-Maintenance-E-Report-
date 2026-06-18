@@ -26,7 +26,8 @@ service cloud.firestore {
 
     function isValidRecord(data) {
       return data.keys().hasAll(['id', 'maintainerName', 'role', 'department', 'machineId', 'machineName', 'workType', 'timeType', 'date', 'startTime', 'finishTime', 'duration', 'description', 'createdAt'])
-        && data.keys().size() >= 14 && data.keys().size() <= 16
+        && data.keys().size() >= 14 && data.keys().size() <= 17
+        && (!('shift' in data) || (data.shift is string && data.shift.size() <= 200))
         && data.id is string && data.id.size() <= 128
         && data.maintainerName is string && data.maintainerName.size() <= 200
         && data.role is string && data.role.size() <= 50
@@ -54,7 +55,8 @@ service cloud.firestore {
         && data.description is string && data.description.size() <= 6000
         && data.status is string && data.status.size() <= 50
         && data.createdAt is string && data.createdAt.size() <= 100
-        && (!('scheduledAt' in data) || (data.scheduledAt is string && data.scheduledAt.size() <= 100));
+        && (!('scheduledAt' in data) || (data.scheduledAt is string && data.scheduledAt.size() <= 100))
+        && (!('shift' in data) || (data.shift is string && data.shift.size() <= 200));
     }
 
     function isValidMachine(data) {

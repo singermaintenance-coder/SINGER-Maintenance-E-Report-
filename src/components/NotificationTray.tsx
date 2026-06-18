@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'motion/react';
-import { Notification, User } from '../types';
+import { Notification, User, MachineReport } from '../types';
 import { Bell, X, CheckCircle2, AlertTriangle, Calendar, Info } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '../lib/utils';
@@ -10,13 +10,40 @@ interface NotificationTrayProps {
   user: User;
   onMarkRead: (id: string, userId: string) => void;
   onDelete?: (id: string) => void;
+  reports?: MachineReport[];
+  onNotificationClick?: (notif: Notification) => void;
 }
 
 const NOTIFICATION_SOUND = "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3";
 
-export default function NotificationTray({ notifications, user, onMarkRead, onDelete }: NotificationTrayProps) {
+export default function NotificationTray({ 
+  notifications, 
+  user, 
+  onMarkRead, 
+  onDelete,
+  reports,
+  onNotificationClick
+}: NotificationTrayProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const unreadCount = notifications.filter(n => !n.readBy.includes(user.id)).length;
+
+  // Filter list to only display active and unfinished jobs
+  const visibleNotifications = reports ? notifications.filter(notif => {
+    if (notif.type === 'System') return true;
+    if (notif.reportId) {
+      const report = reports.find(r => r.id === notif.reportId);
+      // Only include if the report exists and is NOT addressed/completed
+      return report && report.status !== 'addressed';
+    }
+    // Fallback: check if there is an active report on this machine of this type
+    const activeReports = reports.filter(r => 
+      r.machineId === notif.machineId && 
+      r.workType === notif.type && 
+      r.status !== 'addressed'
+    );
+    return activeReports.length > 0;
+  }) : notifications;
+
+  const unreadCount = visibleNotifications.filter(n => !n.readBy.includes(user.id)).length;
   const prevUnreadCount = useRef(unreadCount);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -80,7 +107,7 @@ export default function NotificationTray({ notifications, user, onMarkRead, onDe
               </div>
 
               <div className="flex-1 overflow-y-auto scrollbar-hide">
-                {notifications.length === 0 ? (
+                {visibleNotifications.length === 0 ? (
                   <div className="p-12 text-center">
                     <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-200 mx-auto mb-4">
                       <Bell size={32} />
@@ -90,7 +117,7 @@ export default function NotificationTray({ notifications, user, onMarkRead, onDe
                 ) : (
                   <div className="divide-y-2 divide-slate-50">
                     <AnimatePresence mode="popLayout">
-                      {notifications.map((notif) => {
+                      {visibleNotifications.map((notif) => {
                         const isRead = notif.readBy.includes(user.id);
                         return (
                           <motion.div 
@@ -118,6 +145,10 @@ export default function NotificationTray({ notifications, user, onMarkRead, onDe
                             )}
                             onClick={() => {
                               if (!isRead) onMarkRead(notif.id, user.id);
+                              if (onNotificationClick) {
+                                onNotificationClick(notif);
+                                setIsOpen(false);
+                              }
                             }}
                           >
                             {/* Swipe Backgrounds */}
@@ -168,7 +199,7 @@ export default function NotificationTray({ notifications, user, onMarkRead, onDe
                 )}
               </div>
 
-              {notifications.length > 0 && (
+              {visibleNotifications.length > 0 && (
                 <div className="p-4 bg-slate-50 border-t-2 border-slate-100 text-center">
                   <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
                     Live Telemetry Feed // Singer Industrial
