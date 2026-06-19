@@ -525,9 +525,7 @@ export default function ModularFactoryFlow({
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                {workTypes
-                  .filter(wt => departmentName === 'Other' ? (wt.type === 'Repair' || wt.type === 'Service') : true)
-                  .map((wt) => (
+                {workTypes.map((wt) => (
                   <button
                     key={wt.type}
                     onClick={() => handleWorkTypeSelect(wt.type)}

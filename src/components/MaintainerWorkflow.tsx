@@ -1042,26 +1042,24 @@ export default function MaintainerWorkflow({
                     </div>
                   </button>
 
-                  {department !== 'Other' && (
-                    <button
-                      onClick={() => { setWorkType('Break Down'); setStep(4); }}
-                      className={cn(
-                        "group p-8 sm:p-10 bg-white border-4 rounded-[40px] text-left transition-all flex flex-col gap-8",
-                        workType === 'Break Down' ? "border-singer-red shadow-2xl" : "border-slate-50 hover:border-singer-red hover:shadow-[30px_30px_60px_rgba(211,47,47,0.05)]"
-                      )}
-                    >
-                      <div className={cn(
-                        "w-16 h-16 rounded-[20px] flex items-center justify-center text-white transition-all shadow-xl group-hover:scale-110",
-                        workType === 'Break Down' ? "bg-singer-red" : "bg-slate-900 group-hover:bg-singer-red"
-                      )}>
-                        <AlertTriangle size={32} />
-                      </div>
-                      <div>
-                        <h3 className="text-2xl sm:text-3xl font-black text-slate-900 leading-none mb-2 uppercase tracking-tighter italic">BREAK DOWN</h3>
-                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em]">Critical Failure Response</p>
-                      </div>
-                    </button>
-                  )}
+                  <button
+                    onClick={() => { setWorkType('Break Down'); setStep(4); }}
+                    className={cn(
+                      "group p-8 sm:p-10 bg-white border-4 rounded-[40px] text-left transition-all flex flex-col gap-8",
+                      workType === 'Break Down' ? "border-singer-red shadow-2xl" : "border-slate-50 hover:border-singer-red hover:shadow-[30px_30px_60px_rgba(211,47,47,0.05)]"
+                    )}
+                  >
+                    <div className={cn(
+                      "w-16 h-16 rounded-[20px] flex items-center justify-center text-white transition-all shadow-xl group-hover:scale-110",
+                      workType === 'Break Down' ? "bg-singer-red" : "bg-slate-900 group-hover:bg-singer-red"
+                    )}>
+                      <AlertTriangle size={32} />
+                    </div>
+                    <div>
+                      <h3 className="text-2xl sm:text-3xl font-black text-slate-900 leading-none mb-2 uppercase tracking-tighter italic">BREAK DOWN</h3>
+                      <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em]">Critical Failure Response</p>
+                    </div>
+                  </button>
                 </div>
               </motion.div>
             )}
