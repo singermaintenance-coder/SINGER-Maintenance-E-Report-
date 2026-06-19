@@ -202,6 +202,10 @@ export function isSunday(date: Date): boolean {
 }
 
 export function getShiftForDate(date: Date, baseShift: string): string | null {
+  if (baseShift.includes('24 Hours') || baseShift === '7:30 AM - 7:30 AM (24 Hours)') {
+    return '7:30 AM - 7:30 AM';
+  }
+
   // Check if it's a holiday in Sri Lanka
   if (getSriLankanHoliday(date)) {
     return null; // non-working holiday

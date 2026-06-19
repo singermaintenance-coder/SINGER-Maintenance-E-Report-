@@ -290,8 +290,11 @@ export default function MaintainerWorkflow({
   }, [machine, workType, reports]);
 
   const selectedShift = useMemo(() => {
+    if (department === 'Other' || machine?.department === 'Other') {
+      return '7:30 AM - 7:30 AM (24 Hours)';
+    }
     return matchedReport?.shift || '7:30 AM - 4:30 PM';
-  }, [matchedReport]);
+  }, [matchedReport, department, machine]);
 
   const calculateDuration = (start: string, finish: string) => {
     if (!start || !finish) return 0;
@@ -370,7 +373,9 @@ export default function MaintainerWorkflow({
       finishTime,
       duration: calculateDuration(startTime, finishTime),
       description,
-      shift: activeReport?.shift || pendingReportForMachine?.shift || selectedShift || 'None Shift',
+      shift: (department === 'Other' || machine?.department === 'Other' || selectedLocation)
+        ? '7:30 AM - 7:30 AM (24 Hours)'
+        : (activeReport?.shift || pendingReportForMachine?.shift || selectedShift || 'None Shift'),
       createdAt: new Date().toISOString(),
       reportId: associatedReport?.id,
       problemDescription: associatedReport?.description
@@ -467,7 +472,9 @@ export default function MaintainerWorkflow({
         finishTime,
         duration: calculateDuration(startTime, finishTime),
         description: translated,
-        shift: activeReport?.shift || pendingReportForMachine?.shift || selectedShift || 'None Shift',
+        shift: (department === 'Other' || machine?.department === 'Other' || selectedLocation)
+          ? '7:30 AM - 7:30 AM (24 Hours)'
+          : (activeReport?.shift || pendingReportForMachine?.shift || selectedShift || 'None Shift'),
         createdAt: new Date().toISOString(),
         reportId: associatedReport?.id,
         problemDescription: associatedReport?.description

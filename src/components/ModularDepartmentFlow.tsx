@@ -191,7 +191,16 @@ export default function ModularFactoryFlow({
 
   const handleWorkTypeSelect = async (type: WorkType) => {
     setSelectedWorkType(type);
-    setStep('shift');
+    if (departmentName === 'Other' || selectedMachine?.department === 'Other') {
+      setSelectedShift('7:30 AM - 7:30 AM (24 Hours)');
+      if (type === 'Service') {
+        setStep('scheduling');
+      } else {
+        setStep('description');
+      }
+    } else {
+      setStep('shift');
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -305,8 +314,20 @@ export default function ModularFactoryFlow({
                 else setStep('machines');
               }
               else if (step === 'shift') setStep('work-types');
-              else if (step === 'description') setStep('shift');
-              else if (step === 'scheduling') setStep('shift');
+              else if (step === 'description') {
+                if (departmentName === 'Other' || selectedMachine?.department === 'Other') {
+                  setStep('work-types');
+                } else {
+                  setStep('shift');
+                }
+              }
+              else if (step === 'scheduling') {
+                if (departmentName === 'Other' || selectedMachine?.department === 'Other') {
+                  setStep('work-types');
+                } else {
+                  setStep('shift');
+                }
+              }
             }}
             className="absolute left-0 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center bg-white border-2 border-slate-200 rounded-xl hover:border-slate-900 transition-all text-slate-900 z-10 shadow-sm"
             disabled={isSubmitting}

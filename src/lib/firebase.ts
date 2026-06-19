@@ -8,7 +8,18 @@ import {
   createUserWithEmailAndPassword,
   User as FirebaseUser 
 } from 'firebase/auth';
-import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, doc, getDocFromServer } from 'firebase/firestore';
+import { 
+  initializeFirestore, 
+  persistentLocalCache, 
+  persistentMultipleTabManager,
+  collection, 
+  addDoc, 
+  onSnapshot, 
+  query, 
+  orderBy, 
+  doc, 
+  getDocFromServer 
+} from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 let app: any;
@@ -22,12 +33,18 @@ try {
   console.log("[FirebaseInit] Initializing app with ProjectID:", firebaseConfig.projectId);
   app = initializeApp(firebaseConfig);
   auth = getAuth(app);
+  const firestoreSettings = {
+    localCache: persistentLocalCache({
+      tabManager: persistentMultipleTabManager()
+    })
+  };
+
   if (firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId !== "(default)") {
     console.log("[FirebaseInit] Firestore database:", firebaseConfig.firestoreDatabaseId);
-    db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+    db = initializeFirestore(app, firestoreSettings, firebaseConfig.firestoreDatabaseId);
   } else {
     console.log("[FirebaseInit] Firestore database: (default)");
-    db = getFirestore(app);
+    db = initializeFirestore(app, firestoreSettings);
   }
 } catch (error) {
   console.error("[FirebaseInit] Failed to initialize Firebase:", error);
