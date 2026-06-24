@@ -377,8 +377,8 @@ export default function MaintainerWorkflow({
         ? '7:30 AM - 7:30 AM (24 Hours)'
         : (activeReport?.shift || pendingReportForMachine?.shift || selectedShift || 'None Shift'),
       createdAt: new Date().toISOString(),
-      reportId: associatedReport?.id,
-      problemDescription: associatedReport?.description
+      ...(associatedReport?.id ? { reportId: associatedReport.id } : {}),
+      ...(associatedReport?.description ? { problemDescription: associatedReport.description } : {})
     };
 
     onSave(record);
@@ -426,8 +426,8 @@ export default function MaintainerWorkflow({
       duration: 0,
       description: 'Service Requested',
       createdAt: now,
-      reportId: associatedReport?.id,
-      problemDescription: associatedReport?.description
+      ...(associatedReport?.id ? { reportId: associatedReport.id } : {}),
+      ...(associatedReport?.description ? { problemDescription: associatedReport.description } : {})
     };
 
     onSave(record);
@@ -476,8 +476,8 @@ export default function MaintainerWorkflow({
           ? '7:30 AM - 7:30 AM (24 Hours)'
           : (activeReport?.shift || pendingReportForMachine?.shift || selectedShift || 'None Shift'),
         createdAt: new Date().toISOString(),
-        reportId: associatedReport?.id,
-        problemDescription: associatedReport?.description
+        ...(associatedReport?.id ? { reportId: associatedReport.id } : {}),
+        ...(associatedReport?.description ? { problemDescription: associatedReport.description } : {})
       };
 
       onSave(record);

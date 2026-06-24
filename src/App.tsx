@@ -234,11 +234,17 @@ export default function App() {
   const addRecord = async (newRecord: MaintenanceRecord) => {
     try {
       console.log("[FirestoreWrite] Saving record:", newRecord.id);
-      if (newRecord.description) {
-        newRecord.description = await translateToEnglish(newRecord.description);
+      const cleanRecord = { ...newRecord };
+      Object.keys(cleanRecord).forEach(key => {
+        if (cleanRecord[key as keyof typeof cleanRecord] === undefined) {
+          delete cleanRecord[key as keyof typeof cleanRecord];
+        }
+      });
+      if (cleanRecord.description) {
+        cleanRecord.description = await translateToEnglish(cleanRecord.description);
       }
-      await setDoc(doc(db, 'records', newRecord.id), newRecord);
-      console.log("[FirestoreWrite] Saved record successfully:", newRecord.id);
+      await setDoc(doc(db, 'records', cleanRecord.id), cleanRecord);
+      console.log("[FirestoreWrite] Saved record successfully:", cleanRecord.id);
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, `records/${newRecord.id}`);
     }
