@@ -137,7 +137,7 @@ export default function SupervisorDashboard({
       const maintenanceCount = machineRecords.length;
       
       // Calculate downtime in hours
-      const downtimeMinutes = machineRecords.reduce((sum, r) => sum + r.duration, 0);
+      const downtimeMinutes = machineRecords.filter(r => r.workType !== 'Service').reduce((sum, r) => sum + r.duration, 0);
       const downtimeHours = parseFloat((downtimeMinutes / 60).toFixed(1));
       
       // Standard monthly available hours = custom value or defaults to 200
@@ -176,7 +176,7 @@ export default function SupervisorDashboard({
     const totalMachines = deptMachines.length;
     const totalMaintenanceCount = deptRecords.length;
     
-    const totalDowntimeMinutes = deptRecords.reduce((sum, r) => sum + r.duration, 0);
+    const totalDowntimeMinutes = deptRecords.filter(r => r.workType !== 'Service').reduce((sum, r) => sum + r.duration, 0);
     const totalDowntimeHours = parseFloat((totalDowntimeMinutes / 60).toFixed(1));
     
     // Sum individual target hours for the department
@@ -277,9 +277,9 @@ export default function SupervisorDashboard({
         escapeCSVValue(reportedBy),
         escapeCSVValue(problemDescription),
         escapeCSVValue(r.description),
-        escapeCSVValue(formatDateTime(r.startTime)),
-        escapeCSVValue(formatDateTime(r.finishTime)),
-        escapeCSVValue(`${r.duration}m`),
+        escapeCSVValue(r.workType === 'Service' ? formatDate(r.date) : formatDateTime(r.startTime)),
+        escapeCSVValue(r.workType === 'Service' ? 'N/A' : formatDateTime(r.finishTime)),
+        escapeCSVValue(r.workType === 'Service' ? 'N/A' : `${r.duration}m`),
         escapeCSVValue('Resolved')
       ];
     });
@@ -1132,13 +1132,24 @@ export default function SupervisorDashboard({
                             </div>
 
                             <div className="md:text-right flex flex-row md:flex-col justify-between shrink-0 items-end md:items-stretch border-t md:border-t-0 md:border-l border-slate-50 pt-4 md:pt-0 md:pl-8">
-                              <div>
-                                <div className="text-4xl sm:text-6xl font-black text-slate-900 tracking-tighter tabular-nums leading-none">{record.duration}</div>
-                                <div className="text-[10px] font-black text-slate-300 uppercase tracking-widest mt-1">Net Minutes</div>
-                              </div>
+                              {record.workType !== 'Service' ? (
+                                <div>
+                                  <div className="text-4xl sm:text-6xl font-black text-slate-900 tracking-tighter tabular-nums leading-none">{record.duration}</div>
+                                  <div className="text-[10px] font-black text-slate-300 uppercase tracking-widest mt-1">Net Minutes</div>
+                                </div>
+                              ) : (
+                                <div>
+                                  <div className="text-xl sm:text-2xl font-black text-blue-600 tracking-tighter uppercase italic leading-none">Scheduled</div>
+                                  <div className="text-[10px] font-black text-slate-300 uppercase tracking-widest mt-1">Status Type</div>
+                                </div>
+                              )}
                               
                               <div className="text-right">
-                                <div className="text-[9px] sm:text-[10px] font-black text-slate-300 uppercase tracking-widest mb-1">{formatTimeRange(record.startTime, record.finishTime)}</div>
+                                {record.workType !== 'Service' ? (
+                                  <div className="text-[9px] sm:text-[10px] font-black text-slate-300 uppercase tracking-widest mb-1">{formatTimeRange(record.startTime, record.finishTime)}</div>
+                                ) : (
+                                  record.startTime && <div className="text-[9px] sm:text-[10px] font-black text-blue-500 uppercase tracking-widest mb-1">Assigned at {format(new Date(record.startTime), 'hh:mm a')}</div>
+                                )}
                                 <div className="text-[10px] sm:text-sm font-black text-slate-900 uppercase italic tracking-tight">LOGGED BY {record.maintainerName}</div>
                                 {record.shift && (
                                   <div className="text-[9px] font-black text-singer-red uppercase tracking-widest mt-1">SHIFT: {record.shift}</div>

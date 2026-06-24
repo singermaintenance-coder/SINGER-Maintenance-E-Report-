@@ -168,7 +168,11 @@ export default function AdminDashboard({
                           </div>
                         </td>
                         <td className="px-6 sm:px-10 py-6 sm:py-8 whitespace-nowrap">
-                          <span className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tighter tabular-nums">{record.duration}<span className="text-xs text-slate-300 ml-1">M</span></span>
+                          {record.workType === 'Service' ? (
+                            <span className="text-xs font-black text-blue-600 tracking-wider uppercase bg-blue-50 border border-blue-200 px-3 py-1 rounded">Scheduled</span>
+                          ) : (
+                            <span className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tighter tabular-nums">{record.duration}<span className="text-xs text-slate-300 ml-1">M</span></span>
+                          )}
                         </td>
                       </tr>
                     ))

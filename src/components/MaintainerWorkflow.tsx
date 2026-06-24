@@ -240,7 +240,14 @@ export default function MaintainerWorkflow({
 
   // Initialize times for manual entry
   useEffect(() => {
-    if (step === 4 && timeType === 'Previous' && !startTime) {
+    if (step === 4 && workType === 'Service' && !startTime) {
+      const st = new Date();
+      const [syr, smo, sdy] = manualStartDate.split('-').map(Number);
+      st.setFullYear(syr, smo - 1, sdy);
+      st.setHours(9, 0, 0, 0); // default to 09:00 AM as per example
+      setStartTime(st.toISOString());
+      setFinishTime(st.toISOString());
+    } else if (step === 4 && timeType === 'Previous' && !startTime) {
       const st = new Date();
       const [syr, smo, sdy] = manualStartDate.split('-').map(Number);
       st.setFullYear(syr, smo - 1, sdy);
@@ -252,7 +259,7 @@ export default function MaintainerWorkflow({
       setStartTime(st.toISOString());
       setFinishTime(ft.toISOString());
     }
-  }, [step, timeType, startTime, manualStartDate, manualFinishDate]);
+  }, [step, workType, timeType, startTime, manualStartDate, manualFinishDate]);
 
   const pendingReportForMachine = useMemo(() => {
     if (!machine) return null;
@@ -307,9 +314,9 @@ export default function MaintainerWorkflow({
     return new Date(finishTime).getTime() <= new Date(startTime).getTime();
   }, [timeType, startTime, finishTime]);
 
-  // Automatically start timer / retrieve start time for Break Down records
+  // Automatically start timer / retrieve start time for Break Down and Repair records
   useEffect(() => {
-    if (step === 4 && timeType === 'Now' && workType === 'Break Down') {
+    if (step === 4 && timeType === 'Now' && (workType === 'Break Down' || workType === 'Repair')) {
       const originalTime = activeReport?.createdAt || pendingReportForMachine?.createdAt || matchedReport?.createdAt || new Date().toISOString();
       if (startTime !== originalTime) {
         setStartTime(originalTime);
@@ -351,13 +358,18 @@ export default function MaintainerWorkflow({
   };
 
   const handleSave = async () => {
-    if (!department || !machine || !workType || !timeType || !startTime || !finishTime) {
+    const isService = workType === 'Service';
+    if (!department || !machine || !workType || (!isService && (!timeType || !startTime || !finishTime)) || (isService && !startTime)) {
       alert("Please complete all fields before saving.");
       return;
     }
 
     const reportToClose = activeReport || pendingReportForMachine;
     const associatedReport = reportToClose || matchedReport;
+
+    const finalStartTime = startTime;
+    const finalFinishTime = isService ? startTime : finishTime;
+    const finalDuration = isService ? 0 : calculateDuration(startTime, finishTime);
 
     const record: MaintenanceRecord = {
       id: Math.random().toString(36).substr(2, 9),
@@ -367,12 +379,12 @@ export default function MaintainerWorkflow({
       machineId: machine.id,
       machineName: machine.name,
       workType,
-      timeType,
-      date: timeType === 'Now' ? startTime : new Date(manualStartDate).toISOString(),
-      startTime,
-      finishTime,
-      duration: calculateDuration(startTime, finishTime),
-      description,
+      timeType: isService ? 'Now' : timeType,
+      date: isService ? startTime : (timeType === 'Now' ? startTime : new Date(manualStartDate).toISOString()),
+      startTime: finalStartTime,
+      finishTime: finalFinishTime,
+      duration: finalDuration,
+      description: isService ? 'Routine Service Completed' : description,
       shift: (department === 'Other' || machine?.department === 'Other' || selectedLocation)
         ? '7:30 AM - 7:30 AM (24 Hours)'
         : (activeReport?.shift || pendingReportForMachine?.shift || selectedShift || 'None Shift'),
@@ -1072,7 +1084,105 @@ export default function MaintainerWorkflow({
             )}
 
             {/* Step 4: Time Selection */}
-            {step === 4 && (
+            {step === 4 && workType === 'Service' && (
+              <motion.div 
+                key="step4-service" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
+                className="space-y-12 max-w-4xl"
+              >
+                <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+                  <div>
+                    <h1 className="text-6xl sm:text-8xl font-black text-slate-900 tracking-tighter leading-[0.8] mb-6 uppercase">SERVICE DATE & TIME</h1>
+                    <div className="w-32 h-1.5 bg-blue-600 mb-4"></div>
+                    <p className="text-slate-400 font-bold uppercase tracking-[0.2em] text-xs underline decoration-slate-200 underline-offset-8 decoration-4">Preventative Audit Schedule Coordinates</p>
+                  </div>
+                  <button 
+                    onClick={() => setStep(3)} 
+                    className="flex items-center gap-2 bg-slate-900 text-white font-black uppercase text-[10px] sm:text-xs tracking-widest px-8 py-3 rounded-xl hover:bg-slate-800 transition-all shadow-lg active:scale-95 self-start sm:self-center"
+                  >
+                    <ArrowLeft size={16} /> BACK
+                  </button>
+                </header>
+
+                <div className="bg-white p-10 sm:p-16 rounded-[48px] shadow-2xl border-2 border-slate-50 space-y-10 relative overflow-hidden">
+                  <div className="absolute top-0 right-0 p-10 text-slate-50 select-none pointer-events-none">
+                    <Stethoscope size={120} />
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8 relative z-10">
+                    {/* SERVICE DATE SECTION */}
+                    <div className="space-y-6 p-6 rounded-[32px] bg-slate-50/50 border border-slate-100">
+                      <span className="text-[10px] font-black text-blue-600 uppercase tracking-[0.3em] block ml-2">Execution Coordinates</span>
+                      
+                      <div className="space-y-2">
+                        <label className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-[0.4em] ml-6">
+                          <Calendar size={12} className="text-slate-300" /> Service Date
+                        </label>
+                        <div className="relative group">
+                          <input 
+                            type="date" 
+                            value={manualStartDate} 
+                            onChange={(e) => {
+                              const newDateStr = e.target.value;
+                              setManualStartDate(newDateStr);
+                              const currentST = startTime ? new Date(startTime) : new Date();
+                              const [yr, mo, dy] = newDateStr.split('-').map(Number);
+                              currentST.setFullYear(yr, mo - 1, dy);
+                              setStartTime(currentST.toISOString());
+                              setFinishTime(currentST.toISOString());
+                            }} 
+                            className="w-full p-8 bg-white border-4 border-slate-100 focus:border-slate-900 rounded-[24px] text-2xl font-black outline-none transition-all shadow-inner relative z-10 appearance-none" 
+                          />
+                          <div className="absolute right-8 top-1/2 -translate-y-1/2 z-0 text-slate-200 group-focus-within:text-blue-600 transition-colors pointer-events-none">
+                            <Calendar size={32} />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* START ASSIGNMENT TIME SECTION */}
+                    <div className="space-y-6 p-6 rounded-[32px] bg-slate-50/50 border border-slate-100">
+                      <span className="text-[10px] font-black text-blue-600 uppercase tracking-[0.3em] block ml-2">Temporal Coordinates</span>
+
+                      <div className="space-y-2">
+                        <label className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-[0.4em] ml-6">
+                          <Clock size={12} className="text-slate-300" /> Start Assignment Time
+                        </label>
+                        <div className="relative group">
+                          <button 
+                            onClick={() => setActivePicker('start')}
+                            className="w-full p-8 bg-white border-4 border-slate-100 hover:border-blue-600 focus:border-slate-900 rounded-[24px] text-2xl font-black outline-none transition-all shadow-inner relative z-10 flex items-center justify-start text-slate-800"
+                          >
+                            {startTime ? format(new Date(startTime), 'hh:mm a') : '09:00 AM'}
+                          </button>
+                          <div className="absolute right-8 top-1/2 -translate-y-1/2 z-0 text-slate-200 group-focus-within:text-blue-600 transition-colors pointer-events-none">
+                            <Clock size={32} />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+                    <div className="text-left">
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Target Coordinates</span>
+                      <p className="text-sm font-black text-slate-800 font-mono">
+                        {manualStartDate ? format(new Date(manualStartDate), 'dd MMM yyyy') : '--'} at {startTime ? format(new Date(startTime), 'hh:mm a') : '09:00 AM'}
+                      </p>
+                    </div>
+
+                    <button 
+                      onClick={handleSave}
+                      className="bg-blue-600 text-white font-black text-xl tracking-tighter px-12 py-6 rounded-[24px] hover:bg-slate-900 transition-all shadow-xl shadow-blue-600/20 active:scale-95 flex items-center gap-3 uppercase italic"
+                    >
+                      COMPLETE SERVICE <CheckCircle2 size={24} />
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {/* Step 4: Time Selection */}
+            {step === 4 && workType !== 'Service' && (
               <motion.div 
                 key="step4" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
                 className="space-y-12 max-w-4xl"
@@ -1150,7 +1260,7 @@ export default function MaintainerWorkflow({
 
                       {startTime && !finishTime && (
                         <button onClick={handleFinishNow} className="w-full bg-slate-900 text-white h-24 rounded-[24px] font-black text-2xl tracking-tighter hover:bg-singer-red shadow-2xl transition-all active:scale-95 flex items-center justify-center gap-4 uppercase italic">
-                          <Square fill="currentColor" /> {workType === 'Break Down' ? 'STOP' : 'FINISH'}
+                          <Square fill="currentColor" /> {(workType === 'Break Down' || workType === 'Repair') ? 'STOP' : 'FINISH'}
                         </button>
                       )}
 
@@ -1540,10 +1650,17 @@ export default function MaintainerWorkflow({
                       </div>
 
                       {/* Duration */}
-                      <div className="p-4 bg-white border border-slate-100 rounded-xl">
-                        <span className="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1 select-none">Activity Duration</span>
-                        <span className="text-slate-800 font-black text-base italic block">{selectedCompletedRecord.duration} <span className="font-sans text-xs uppercase text-slate-400 not-italic font-medium">min</span></span>
-                      </div>
+                      {selectedCompletedRecord.workType !== 'Service' ? (
+                        <div className="p-4 bg-white border border-slate-100 rounded-xl">
+                          <span className="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1 select-none">Activity Duration</span>
+                          <span className="text-slate-800 font-black text-base italic block">{selectedCompletedRecord.duration} <span className="font-sans text-xs uppercase text-slate-400 not-italic font-medium">min</span></span>
+                        </div>
+                      ) : (
+                        <div className="p-4 bg-white border border-slate-100 rounded-xl">
+                          <span className="block text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1 select-none">Execution Time</span>
+                          <span className="text-blue-600 font-black text-xs uppercase italic block mt-1">Scheduled</span>
+                        </div>
+                      )}
                     </div>
 
                     {/* Task Description */}
