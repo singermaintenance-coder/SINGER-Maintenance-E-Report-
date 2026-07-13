@@ -1507,9 +1507,9 @@ export default function MaintainerWorkflow({
                   <p className="text-slate-400 font-bold uppercase tracking-[0.2em] text-xs">Exposition of tasks executed within the operational window</p>
                 </header>
                 
-                <div className="bg-white p-2 rounded-[48px] border-4 border-slate-50 shadow-2xl relative">
-                  <div className="absolute top-8 left-10 p-2 bg-slate-100 rounded text-slate-300"><ClipboardList size={20} /></div>
-                  <div className="absolute top-8 right-10 z-10">
+                <div className="bg-white p-6 sm:p-8 rounded-[48px] border-4 border-slate-50 shadow-2xl flex flex-col gap-4 relative">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+                    <div className="p-2 bg-slate-100 rounded text-slate-400"><ClipboardList size={20} /></div>
                     <AITranslationTool 
                       value={description} 
                       onTranslated={(translated) => setDescription(translated)} 
@@ -1519,10 +1519,10 @@ export default function MaintainerWorkflow({
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                     placeholder="Input technical summary. Focus on quantitative data and part identifiers..."
-                    className="w-full h-80 sm:h-[400px] p-16 sm:p-24 bg-transparent text-xl sm:text-2xl font-medium outline-none resize-none placeholder:text-slate-100 font-sans leading-relaxed"
+                    className="w-full h-80 sm:h-[350px] p-4 bg-transparent text-xl sm:text-2xl font-medium outline-none resize-none placeholder:text-slate-200 font-sans leading-relaxed text-slate-800"
                   />
-                  <div className="absolute bottom-10 right-10 flex gap-2">
-                     <span className="text-[10px] font-black text-slate-200 uppercase tracking-widest">Character Pool: {description.length}</span>
+                  <div className="absolute bottom-6 right-8 flex gap-2">
+                     <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Character Pool: {description.length}</span>
                   </div>
                 </div>
                 
