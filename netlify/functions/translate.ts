@@ -1,5 +1,9 @@
 import { Handler } from "@netlify/functions";
 import { GoogleGenAI, Type, ThinkingLevel } from "@google/genai";
+import dotenv from "dotenv";
+
+// Load environment variables from .env if present
+dotenv.config();
 
 export const handler: Handler = async (event) => {
   // We only allow POST requests
@@ -24,9 +28,11 @@ export const handler: Handler = async (event) => {
     }
 
     const apiKey = process.env.GEMINI_API_KEY;
-    console.log(`[Netlify Function] >>> STEP 3b: Checking for GEMINI_API_KEY environment variable. Present: ${!!apiKey}`);
+    console.log(`[Netlify Function] >>> STEP 3b: Checking for GEMINI_API_KEY environment variable.`);
+    console.log(`[Netlify Function] process.env.GEMINI_API_KEY status - exists: ${!!apiKey}, length: ${apiKey ? apiKey.length : 0}`);
+    
     if (!apiKey) {
-      console.warn("[Netlify Function] GEMINI_API_KEY is missing. Falling back to original text immediately.");
+      console.warn("[Netlify Function] GEMINI_API_KEY is missing from process.env. Falling back to original text immediately.");
       return {
         statusCode: 200,
         headers: { "Content-Type": "application/json" },

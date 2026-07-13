@@ -1,5 +1,9 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { GoogleGenAI, Type, ThinkingLevel } from "@google/genai";
+import dotenv from "dotenv";
+
+// Load environment variables from .env if present
+dotenv.config();
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // We only allow POST requests
@@ -18,9 +22,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const apiKey = process.env.GEMINI_API_KEY;
-    console.log(`[Vercel Function] >>> STEP 3b: Checking for GEMINI_API_KEY environment variable. Present: ${!!apiKey}`);
+    console.log(`[Vercel Function] >>> STEP 3b: Checking for GEMINI_API_KEY environment variable.`);
+    console.log(`[Vercel Function] process.env.GEMINI_API_KEY status - exists: ${!!apiKey}, length: ${apiKey ? apiKey.length : 0}`);
+    
     if (!apiKey) {
-      console.warn("[Vercel Function] GEMINI_API_KEY is missing. Falling back to original text immediately.");
+      console.warn("[Vercel Function] GEMINI_API_KEY is missing from process.env. Falling back to original text immediately.");
       return res.status(200).json({ translation: text, fallback: true, warning: "API Key missing" });
     }
 
