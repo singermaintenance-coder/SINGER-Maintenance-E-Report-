@@ -18,7 +18,8 @@ import {
   query, 
   orderBy, 
   doc, 
-  getDocFromServer 
+  getDocFromServer,
+  getFirestore
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
@@ -33,21 +34,43 @@ try {
   console.log("[FirebaseInit] Initializing app with ProjectID:", firebaseConfig.projectId);
   app = initializeApp(firebaseConfig);
   auth = getAuth(app);
-  const firestoreSettings = {
-    localCache: persistentLocalCache({
-      tabManager: persistentMultipleTabManager()
-    })
-  };
+} catch (error) {
+  console.error("[FirebaseInit] Failed to initialize Firebase App/Auth:", error);
+}
 
-  if (firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId !== "(default)") {
-    console.log("[FirebaseInit] Firestore database:", firebaseConfig.firestoreDatabaseId);
-    db = initializeFirestore(app, firestoreSettings, firebaseConfig.firestoreDatabaseId);
-  } else {
-    console.log("[FirebaseInit] Firestore database: (default)");
-    db = initializeFirestore(app, firestoreSettings);
+try {
+  if (app) {
+    let firestoreSettings = {};
+    try {
+      firestoreSettings = {
+        localCache: persistentLocalCache({
+          tabManager: persistentMultipleTabManager()
+        })
+      };
+      console.log("[FirebaseInit] Firestore persistence enabled");
+    } catch (cacheError) {
+      console.warn("[FirebaseInit] Multi-tab persistence is not supported in this browser context (e.g. inside iframe). Falling back to memory/default cache.");
+    }
+
+    const dbId = firebaseConfig.firestoreDatabaseId;
+    if (dbId && dbId !== "(default)") {
+      console.log("[FirebaseInit] Firestore database:", dbId);
+      db = initializeFirestore(app, firestoreSettings, dbId);
+    } else {
+      console.log("[FirebaseInit] Firestore database: (default)");
+      db = initializeFirestore(app, firestoreSettings);
+    }
   }
 } catch (error) {
-  console.error("[FirebaseInit] Failed to initialize Firebase:", error);
+  console.error("[FirebaseInit] Failed to initialize Firestore with custom settings. Retrying with basic getFirestore:", error);
+  try {
+    if (app) {
+      db = getFirestore(app);
+      console.log("[FirebaseInit] Successfully fell back to basic getFirestore");
+    }
+  } catch (fallbackError) {
+    console.error("[FirebaseInit] Critical Error: All Firestore initialization attempts failed:", fallbackError);
+  }
 }
 
 // Log auth state changes

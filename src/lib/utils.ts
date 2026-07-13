@@ -109,6 +109,14 @@ export function handleFirestoreError(error: any, operationType: OperationType, p
 
   const jsonErrorString = JSON.stringify(errInfo);
   console.error("[FirestoreErrorDetails] Prepared JSON Error String:", jsonErrorString);
+
+  // For data queries and real-time syncing (list/get), do not throw to avoid crashing the whole mount lifecycle.
+  // Instead, log the details and return, letting the application function with local cached/default states.
+  if (operationType === OperationType.LIST || operationType === OperationType.GET) {
+    console.warn(`[FirestoreErrorDetails] Gracefully suppressed error on fetch/sync operation: "${operationType}" for path: "${path}". Running with fallback state.`);
+    return;
+  }
+
   throw new Error(jsonErrorString);
 }
 

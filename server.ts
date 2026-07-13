@@ -1,7 +1,10 @@
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, ThinkingLevel } from "@google/genai";
+import dotenv from "dotenv";
+
+dotenv.config();
 
 async function startServer() {
   const app = express();
@@ -59,13 +62,24 @@ You MUST follow these strict rules:
           try {
             const response = await ai.models.generateContent({
               model: modelName,
-              contents: `Input Text to translate:\n"${text}"`,
+              contents: text,
               config: {
                 systemInstruction,
                 temperature: 0.1,
+                thinkingConfig: {
+                  thinkingLevel: ThinkingLevel.MINIMAL,
+                }
               }
             });
-            return response.text?.trim() || text;
+            
+            let result = response.text?.trim() || text;
+            
+            // Post-process: strip any enclosing quotes that the LLM might have returned
+            if ((result.startsWith('"') && result.endsWith('"')) || (result.startsWith("'") && result.endsWith("'"))) {
+              result = result.substring(1, result.length - 1).trim();
+            }
+            
+            return result;
           } catch (err: any) {
             attempt++;
             if (attempt >= maxAttempts) {
@@ -82,12 +96,12 @@ You MUST follow these strict rules:
       let translatedText = text;
       try {
         try {
-          translatedText = await executeWithRetry("gemini-3.5-flash", 3);
-          console.log(`[Backend] Translated description successfully`);
+          translatedText = await executeWithRetry("gemini-3.1-flash-lite", 3);
+          console.log(`[Backend] Translated description successfully via gemini-3.1-flash-lite`);
         } catch (firstError: any) {
-          console.log(`[Backend] Primary translation model busy, selecting alternative gemini-3.1-flash-lite...`);
-          translatedText = await executeWithRetry("gemini-3.1-flash-lite", 2);
-          console.log(`[Backend] Translated description successfully via alternate`);
+          console.log(`[Backend] Primary translation model busy, selecting alternative gemini-3.5-flash...`);
+          translatedText = await executeWithRetry("gemini-3.5-flash", 2);
+          console.log(`[Backend] Translated description successfully via alternate gemini-3.5-flash`);
         }
       } catch (genError: any) {
         console.log("[Backend] Dynamic translation skipped. Retaining original description.");

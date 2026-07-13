@@ -1,14 +1,21 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
 import SingerLogo from './SingerLogo';
 
 export default function Splash({ onComplete }: { onComplete: () => void }) {
+  const onCompleteRef = useRef(onComplete);
+
+  // Keep the ref updated with the latest callback reference
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
+
   useEffect(() => {
     const timer = setTimeout(() => {
-      onComplete();
+      onCompleteRef.current();
     }, 3000);
     return () => clearTimeout(timer);
-  }, [onComplete]);
+  }, []);
 
   return (
     <div className="fixed inset-0 bg-singer-red flex items-center justify-center z-[100]">

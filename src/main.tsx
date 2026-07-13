@@ -55,13 +55,26 @@ createRoot(document.getElementById('root')!).render(
 // Register service worker for PWA support on mobile and desktop
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js')
-      .then((registration) => {
-        console.log('SW registered with scope:', registration.scope);
-      })
-      .catch((error) => {
-        console.error('SW registration failed:', error);
+    // In development mode, unregister any active service workers to prevent cached bundles from causing white screen / loading issues
+    if ((import.meta as any).env?.DEV) {
+      navigator.serviceWorker.getRegistrations().then((registrations) => {
+        for (const registration of registrations) {
+          registration.unregister().then((success) => {
+            if (success) {
+              console.log('[Dev] Unregistered service worker to prevent stale dev caches');
+            }
+          });
+        }
       });
+    } else {
+      navigator.serviceWorker.register('/sw.js')
+        .then((registration) => {
+          console.log('SW registered with scope:', registration.scope);
+        })
+        .catch((error) => {
+          console.error('SW registration failed:', error);
+        });
+    }
   });
 }
 

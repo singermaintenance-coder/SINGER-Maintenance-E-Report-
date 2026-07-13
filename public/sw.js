@@ -40,6 +40,35 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Network-First for navigation and HTML document requests to ensure fresh assets and prevent stale bundle errors
+  const isNavigation = event.request.mode === 'navigate' || 
+                       event.request.url.endsWith('/') || 
+                       event.request.url.endsWith('/index.html');
+
+  if (isNavigation) {
+    event.respondWith(
+      fetch(event.request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const responseToCache = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, responseToCache);
+            });
+            return networkResponse;
+          }
+          return caches.match(event.request).then((cachedResponse) => {
+            return cachedResponse || networkResponse;
+          });
+        })
+        .catch(() => {
+          return caches.match('/index.html').then((cached) => {
+            return cached || caches.match('/');
+          });
+        })
+    );
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request)
       .then((cachedResponse) => {
