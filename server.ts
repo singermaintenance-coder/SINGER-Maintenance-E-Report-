@@ -1,7 +1,7 @@
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
-import { GoogleGenAI, ThinkingLevel } from "@google/genai";
+import { GoogleGenAI, ThinkingLevel, Type } from "@google/genai";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -66,20 +66,40 @@ You MUST follow these strict rules:
               config: {
                 systemInstruction,
                 temperature: 0.1,
+                responseMimeType: "application/json",
+                responseSchema: {
+                  type: Type.OBJECT,
+                  properties: {
+                    translation: {
+                      type: Type.STRING,
+                      description: "The direct standard English translation of the input text. No explanation, markdown, introductory text, or quotes."
+                    }
+                  },
+                  required: ["translation"]
+                },
                 thinkingConfig: {
                   thinkingLevel: ThinkingLevel.MINIMAL,
                 }
               }
             });
             
-            let result = response.text?.trim() || text;
+            const rawText = response.text?.trim();
+            if (!rawText) return text;
             
-            // Post-process: strip any enclosing quotes that the LLM might have returned
-            if ((result.startsWith('"') && result.endsWith('"')) || (result.startsWith("'") && result.endsWith("'"))) {
-              result = result.substring(1, result.length - 1).trim();
+            try {
+              const parsed = JSON.parse(rawText);
+              if (parsed && typeof parsed.translation === "string") {
+                let result = parsed.translation.trim();
+                if ((result.startsWith('"') && result.endsWith('"')) || (result.startsWith("'") && result.endsWith("'"))) {
+                  result = result.substring(1, result.length - 1).trim();
+                }
+                return result;
+              }
+            } catch (jsonErr) {
+              console.error("[Backend] JSON Parse Error on raw model response:", rawText, jsonErr);
             }
             
-            return result;
+            return text;
           } catch (err: any) {
             attempt++;
             if (attempt >= maxAttempts) {
