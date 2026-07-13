@@ -15,20 +15,23 @@ async function startServer() {
   // API Route for translation
   app.post("/api/translate", async (req, res) => {
     const { text } = req.body;
+    console.log(`[Backend Route] >>> STEP 3a: Received HTTP POST request to /api/translate. text payload: "${text}"`);
+    
     if (!text || typeof text !== "string") {
+      console.warn(`[Backend Route] Bad request: text field missing or not a string. body:`, req.body);
       res.status(400).json({ error: "Text is required and must be a string." });
       return;
     }
 
     try {
       const apiKey = process.env.GEMINI_API_KEY;
+      console.log(`[Backend Route] >>> STEP 3b: Checking for GEMINI_API_KEY environment variable. Present: ${!!apiKey}`);
       if (!apiKey) {
-        console.warn("[Backend] GEMINI_API_KEY is missing. Falling back to original text.");
+        console.warn("[Backend Route] GEMINI_API_KEY is missing. Falling back to original text immediately.");
         res.json({ translation: text, fallback: true, warning: "API Key missing" });
         return;
       }
 
-      console.log(`[Backend] Translating description: "${text.substring(0, 50)}..."`);
       const ai = new GoogleGenAI({
         apiKey,
         httpOptions: {
@@ -60,7 +63,7 @@ You MUST follow these strict rules:
         let attempt = 0;
         while (attempt < maxAttempts) {
           try {
-            console.log(`[Backend] [Attempt ${attempt + 1}/${maxAttempts}] Calling Gemini API model "${modelName}" for translation. Input length: ${text.length}`);
+            console.log(`[Backend Route] >>> STEP 3c: [Attempt ${attempt + 1}/${maxAttempts}] Invoking Gemini API model "${modelName}" with input length: ${text.length}`);
             
             const config: any = {
               systemInstruction,
@@ -80,12 +83,13 @@ You MUST follow these strict rules:
 
             // Only add thinkingConfig to models that natively support reasoning/thinking
             if (modelName.includes("3.5-flash")) {
-              console.log(`[Backend] Model "${modelName}" supports reasoning. Attaching thinkingConfig...`);
+              console.log(`[Backend Route] Model "${modelName}" supports reasoning. Attaching thinkingConfig...`);
               config.thinkingConfig = {
                 thinkingLevel: ThinkingLevel.MINIMAL,
               };
             }
 
+            console.log(`[Backend Route] >>> STEP 3d: Calling ai.models.generateContent now...`);
             const response = await ai.models.generateContent({
               model: modelName,
               contents: text,
@@ -93,10 +97,10 @@ You MUST follow these strict rules:
             });
             
             const rawText = response.text?.trim();
-            console.log(`[Backend] Raw model response received (length: ${rawText?.length || 0}):`, rawText);
+            console.log(`[Backend Route] >>> STEP 3e: Raw model response received (length: ${rawText?.length || 0}): "${rawText}"`);
             
             if (!rawText) {
-              console.warn(`[Backend] Empty response from model "${modelName}".`);
+              console.warn(`[Backend Route] Empty raw response from model "${modelName}".`);
               return text;
             }
             
@@ -107,25 +111,25 @@ You MUST follow these strict rules:
                 if ((result.startsWith('"') && result.endsWith('"')) || (result.startsWith("'") && result.endsWith("'"))) {
                   result = result.substring(1, result.length - 1).trim();
                 }
-                console.log(`[Backend] Successfully parsed translation: "${result}"`);
+                console.log(`[Backend Route] >>> STEP 3f: Successfully parsed JSON. Translated text: "${result}"`);
                 return result;
               } else {
-                console.warn("[Backend] Parsed response did not match expected schema:", parsed);
+                console.warn("[Backend Route] Parsed response did not match expected schema:", parsed);
               }
             } catch (jsonErr: any) {
-              console.error("[Backend] JSON Parse Error on raw model response:", rawText, jsonErr.message);
+              console.error("[Backend Route] JSON Parse Error on raw model response:", rawText, jsonErr.message);
             }
             
             return text;
           } catch (err: any) {
             attempt++;
-            console.error(`[Backend] Attempt ${attempt} on model "${modelName}" failed with error:`, err.message || err);
+            console.error(`[Backend Route] Attempt ${attempt} on model "${modelName}" failed with error:`, err.message || err);
             
             if (attempt >= maxAttempts) {
               throw err;
             }
             const delay = Math.pow(2, attempt) * 150 + Math.random() * 50;
-            console.log(`[Backend] Model ${modelName} encountered error. Retrying in ${Math.round(delay)}ms...`);
+            console.log(`[Backend Route] Model ${modelName} encountered error. Retrying in ${Math.round(delay)}ms...`);
             await new Promise(resolve => setTimeout(resolve, delay));
           }
         }
@@ -138,15 +142,15 @@ You MUST follow these strict rules:
         try {
           usedModel = "gemini-3.1-flash-lite";
           translatedText = await executeWithRetry(usedModel, 3);
-          console.log(`[Backend] Translation completed successfully via gemini-3.1-flash-lite`);
+          console.log(`[Backend Route] Translation completed successfully via gemini-3.1-flash-lite`);
         } catch (firstError: any) {
-          console.warn(`[Backend] gemini-3.1-flash-lite failed or busy (${firstError.message}). Selecting alternative gemini-3.5-flash...`);
+          console.warn(`[Backend Route] gemini-3.1-flash-lite failed or busy (${firstError.message}). Selecting alternative gemini-3.5-flash...`);
           usedModel = "gemini-3.5-flash";
           translatedText = await executeWithRetry(usedModel, 2);
-          console.log(`[Backend] Translation completed successfully via alternate gemini-3.5-flash`);
+          console.log(`[Backend Route] Translation completed successfully via alternate gemini-3.5-flash`);
         }
       } catch (genError: any) {
-        console.error("[Backend] Dynamic translation skipped. Both models failed. Error details:", genError.message || genError);
+        console.error("[Backend Route] !!! BOTH MODELS FAILED. Falling back to returning original text. Error details:", genError.message || genError);
         res.json({ 
           translation: text, 
           fallback: true, 
@@ -155,9 +159,10 @@ You MUST follow these strict rules:
         return;
       }
 
+      console.log(`[Backend Route] >>> STEP 3g: Sending translated response back to client: "${translatedText}"`);
       res.json({ translation: translatedText });
     } catch (error: any) {
-      console.error("[Backend] General translation route error:", error);
+      console.error("[Backend Route] General translation route error:", error);
       res.json({ translation: text, fallback: true, error: error.message || "Failed to translate." });
     }
   });

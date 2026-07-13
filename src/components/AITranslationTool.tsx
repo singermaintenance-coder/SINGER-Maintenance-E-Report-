@@ -16,23 +16,34 @@ export default function AITranslationTool({ value, onTranslated, className }: AI
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const handleTranslate = async () => {
-    if (!value.trim() || isTranslating) return;
+    if (!value.trim() || isTranslating) {
+      console.log(`[AITranslationTool] Skip translation. value empty or already translating. value: "${value}", isTranslating: ${isTranslating}`);
+      return;
+    }
 
     setIsTranslating(true);
     setErrorMessage(null);
+    console.log(`[AITranslationTool] >>> STEP 1: "Convert to English" Button Click Event Fired. input_text: "${value}"`);
     try {
-      console.log(`[UI] Translation triggered for: "${value.substring(0, 40)}..."`);
+      console.log(`[AITranslationTool] >>> STEP 2: Invoking client-side translateToEnglish with value length: ${value.length}`);
       // We pass true to throwOnError so we can capture and display any failures explicitly requested by the user
       const translated = await translateToEnglish(value, true);
+      console.log(`[AITranslationTool] >>> STEP 5: Translation service returned successfully. result: "${translated}"`);
+      
+      console.log(`[AITranslationTool] >>> STEP 6: Updating UI state via onTranslated callback`);
       onTranslated(translated);
       setShowStatus(true);
-      setTimeout(() => setShowStatus(false), 2000);
+      setTimeout(() => {
+        console.log(`[AITranslationTool] Resetting status notification overlay`);
+        setShowStatus(false);
+      }, 2000);
     } catch (error: any) {
-      console.error("[UI] Translation error caught in component:", error);
+      console.error("[AITranslationTool] !!! STEP 5 (FAILED): Translation error caught in component:", error);
       const errMsg = error?.message || "Translation failed";
       setErrorMessage(errMsg);
       setTimeout(() => setErrorMessage(null), 4000);
     } finally {
+      console.log(`[AITranslationTool] Finished handleTranslate flow. Setting isTranslating back to false`);
       setIsTranslating(false);
     }
   };
