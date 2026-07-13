@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { MaintenanceRecord, Factory, MachineReport, Machine, Notification, User } from '../types';
+import ExcelJS from 'exceljs';
 import { FACTORIES, DEPARTMENTS, SUB_LOCATIONS } from '../constants';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -238,62 +239,167 @@ export default function SupervisorDashboard({
     setSelectedDate(null);
   };
 
-  const exportToCSV = () => {
-    const headers = [
-      'Factory',
-      'Machine',
-      'Work Type',
-      'Work Shift',
-      'Reported Date',
-      'Reported By',
-      'Problem Description',
-      'Maintenance Action',
-      'Start Time',
-      'Finish Time',
-      'Calculated Duration',
-      'Status'
-    ];
+  const exportToExcel = async () => {
+    try {
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Maintenance Report');
 
-    const escapeCSVValue = (val: string | number) => {
-      const str = String(val ?? '');
-      if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
-        return `"${str.replace(/"/g, '""')}"`;
-      }
-      return str;
-    };
-
-    const rows = records.map(r => {
-      const matchingReport = reports.find(rep => rep.id === r.reportId || (rep.machineId === r.machineId && rep.workType === r.workType));
-      const problemDescription = r.problemDescription || matchingReport?.description || 'N/A';
-      const reportedDate = matchingReport ? formatDateTime(matchingReport.createdAt) : formatDate(r.date);
-      const reportedBy = 'Factory Manager';
-
-      return [
-        escapeCSVValue(r.department),
-        escapeCSVValue(r.machineName.replace(/<br\s*\/?>/gi, ' ')),
-        escapeCSVValue(r.workType),
-        escapeCSVValue(r.shift || 'None Shift'),
-        escapeCSVValue(reportedDate),
-        escapeCSVValue(reportedBy),
-        escapeCSVValue(problemDescription),
-        escapeCSVValue(r.description),
-        escapeCSVValue(r.workType === 'Service' ? formatDate(r.date) : formatDateTime(r.startTime)),
-        escapeCSVValue(r.workType === 'Service' ? 'N/A' : formatDateTime(r.finishTime)),
-        escapeCSVValue(r.workType === 'Service' ? 'N/A' : `${r.duration}m`),
-        escapeCSVValue('Resolved')
+      const headers = [
+        'Factory',
+        'Machine',
+        'Work Type',
+        'Work Shift',
+        'Reported Date',
+        'Reported By',
+        'Problem Description',
+        'Maintenance Action',
+        'Start Time',
+        'Finish Time',
+        'Calculated Duration',
+        'Status'
       ];
-    });
 
-    const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
-    link.setAttribute("download", `singer_maintenance_report_${format(new Date(), 'yyyy-MM-dd')}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+      const cleanValue = (val: any) => {
+        if (val === null || val === undefined || String(val).trim() === '') {
+          return 'N/A';
+        }
+        return String(val);
+      };
+
+      // Set columns
+      worksheet.columns = headers.map(header => ({
+        header,
+        key: header.toLowerCase().replace(/ /g, '_'),
+      }));
+
+      // Add data rows
+      records.forEach(r => {
+        const matchingReport = reports.find(rep => rep.id === r.reportId || (rep.machineId === r.machineId && rep.workType === r.workType));
+        const problemDescription = r.problemDescription || matchingReport?.description || 'N/A';
+        const reportedDate = matchingReport ? formatDateTime(matchingReport.createdAt) : formatDate(r.date);
+        const reportedBy = 'Factory Manager';
+
+        const startTime = r.workType === 'Service' ? formatDate(r.date) : formatDateTime(r.startTime);
+        const finishTime = r.workType === 'Service' ? 'N/A' : formatDateTime(r.finishTime);
+        const duration = r.workType === 'Service' ? 'N/A' : `${r.duration}m`;
+
+        worksheet.addRow({
+          factory: cleanValue(r.department),
+          machine: cleanValue(r.machineName?.replace(/<br\s*\/?>/gi, ' ')),
+          work_type: cleanValue(r.workType),
+          work_shift: cleanValue(r.shift || 'None Shift'),
+          reported_date: cleanValue(reportedDate),
+          reported_by: cleanValue(reportedBy),
+          problem_description: cleanValue(problemDescription),
+          maintenance_action: cleanValue(r.description),
+          start_time: cleanValue(startTime),
+          finish_time: cleanValue(finishTime),
+          calculated_duration: cleanValue(duration),
+          status: cleanValue('Resolved')
+        });
+      });
+
+      // Style header row (Row 1)
+      const headerRow = worksheet.getRow(1);
+      headerRow.height = 28;
+
+      headerRow.eachCell((cell) => {
+        // Yellow background colour
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFFFE000' }
+        };
+        // Bold black text
+        cell.font = {
+          name: 'Calibri',
+          size: 11,
+          bold: true,
+          color: { argb: 'FF000000' }
+        };
+        // Centre alignment
+        cell.alignment = {
+          vertical: 'middle',
+          horizontal: 'center',
+          wrapText: true
+        };
+        // Clear borders
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FF000000' } },
+          left: { style: 'thin', color: { argb: 'FF000000' } },
+          bottom: { style: 'thin', color: { argb: 'FF000000' } },
+          right: { style: 'thin', color: { argb: 'FF000000' } }
+        };
+      });
+
+      // Style data rows (Rows 2+)
+      worksheet.eachRow((row, rowNumber) => {
+        if (rowNumber > 1) {
+          row.height = 22;
+          row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+            cell.font = {
+              name: 'Calibri',
+              size: 11,
+              color: { argb: 'FF333333' }
+            };
+            
+            const headerName = headers[colNumber - 1];
+            const centerAlignedCols = ['Work Type', 'Work Shift', 'Reported Date', 'Start Time', 'Finish Time', 'Calculated Duration', 'Status'];
+            cell.alignment = {
+              vertical: 'middle',
+              horizontal: centerAlignedCols.includes(headerName) ? 'center' : 'left',
+              wrapText: true
+            };
+
+            // Soft gray border for data rows
+            cell.border = {
+              top: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+              left: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+              bottom: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+              right: { style: 'thin', color: { argb: 'FFE0E0E0' } }
+            };
+          });
+        }
+      });
+
+      // Enable Excel AutoFilter for the entire header row
+      worksheet.autoFilter = {
+        from: { row: 1, column: 1 },
+        to: { row: 1, column: headers.length }
+      };
+
+      // Keep the header row frozen while scrolling
+      worksheet.views = [
+        { state: 'frozen', xSplit: 0, ySplit: 1, topLeftCell: 'A2', activeCell: 'A2' }
+      ];
+
+      // Automatically adjust each column width according to its content
+      worksheet.columns.forEach((column) => {
+        let maxLength = 0;
+        column.eachCell?.({ includeEmpty: true }, (cell) => {
+          const cellValue = cell.value ? String(cell.value) : '';
+          if (cellValue.length > maxLength) {
+            maxLength = cellValue.length;
+          }
+        });
+        column.width = Math.max(maxLength + 5, 12);
+      });
+
+      // Write to buffer and trigger download
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const link = document.createElement("a");
+      const url = URL.createObjectURL(blob);
+      link.setAttribute("href", url);
+      link.setAttribute("download", `singer_maintenance_report_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error generating Excel file:', error);
+    }
   };
 
   return (
@@ -365,13 +471,16 @@ export default function SupervisorDashboard({
               Map
             </button>
           </div>
-          <button 
-            onClick={exportToCSV}
-            className="btn-primary flex items-center gap-2 group whitespace-nowrap justify-center h-16 sm:h-auto"
-          >
-            <Download size={20} className="group-hover:-translate-y-1 transition-transform" />
-            EXPORT MASTER LOG (.CSV)
-          </button>
+          <div className="flex flex-col sm:flex-row gap-3 items-stretch w-full sm:w-auto">
+            <button 
+              id="download-excel-btn"
+              onClick={exportToExcel}
+              className="btn-primary flex items-center gap-2 group whitespace-nowrap justify-center h-16 sm:h-auto bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20 border-0 text-white font-black uppercase tracking-tight"
+            >
+              <Download size={20} className="group-hover:-translate-y-1 transition-transform" />
+              Download Excel
+            </button>
+          </div>
         </div>
       </div>
 

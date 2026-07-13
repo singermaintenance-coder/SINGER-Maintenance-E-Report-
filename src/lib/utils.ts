@@ -182,7 +182,7 @@ const HOLIDAYS_2026: Record<string, { name: string, type: 'Public' | 'Mercantile
   "2026-05-27": { name: "Eid al-Adha (Hajj Festival Day)", type: "Public" },
   "2026-05-30": { name: "Poson Full Moon Poya Day", type: "Poya" },
   "2026-06-29": { name: "Esala Full Moon Poya Day", type: "Poya" },
-  "2026-07-28": { name: "Nikini Full Moon Poya Day", type: "Poya" },
+  "2026-07-29": { name: "Nikini Full Moon Poya Day", type: "Poya" },
   "2026-08-25": { name: "Milad-un-Nabi (Holy Prophet's Birthday)", type: "Public" },
   "2026-08-27": { name: "Binara Full Moon Poya Day", type: "Poya" },
   "2026-09-25": { name: "Vap Full Moon Poya Day", type: "Poya" },
@@ -193,6 +193,81 @@ const HOLIDAYS_2026: Record<string, { name: string, type: 'Public' | 'Mercantile
   "2026-12-25": { name: "Christmas Day", type: "Public" },
 };
 
+// 2027 Sri Lankan Holidays Map
+const HOLIDAYS_2027: Record<string, { name: string, type: 'Public' | 'Mercantile' | 'Poya' }> = {
+  "2027-01-15": { name: "Tamil Thai Pongal Day", type: "Public" },
+  "2027-01-22": { name: "Duruthu Full Moon Poya Day", type: "Poya" },
+  "2027-02-04": { name: "National Day", type: "Public" },
+  "2027-02-20": { name: "Navam Full Moon Poya Day", type: "Poya" },
+  "2027-03-06": { name: "Mahasivarathri Day", type: "Public" },
+  "2027-03-10": { name: "Eid al-Fitr (Ramazan Festival Day)", type: "Public" },
+  "2027-03-22": { name: "Medin Full Moon Poya Day", type: "Poya" },
+  "2027-03-26": { name: "Good Friday", type: "Public" },
+  "2027-04-13": { name: "Sinhala & Tamil New Year Eve", type: "Public" },
+  "2027-04-14": { name: "Sinhala & Tamil New Year Day", type: "Public" },
+  "2027-04-20": { name: "Bak Full Moon Poya Day", type: "Poya" },
+  "2027-05-01": { name: "May Day", type: "Public" },
+  "2027-05-17": { name: "Eid al-Adha (Hajj Festival Day)", type: "Public" },
+  "2027-05-20": { name: "Vesak Full Moon Poya Day", type: "Poya" },
+  "2027-06-19": { name: "Poson Full Moon Poya Day", type: "Poya" },
+  "2027-07-18": { name: "Esala Full Moon Poya Day", type: "Poya" },
+  "2027-08-15": { name: "Milad-un-Nabi (Holy Prophet's Birthday)", type: "Public" },
+  "2027-08-17": { name: "Nikini Full Moon Poya Day", type: "Poya" },
+  "2027-09-15": { name: "Binara Full Moon Poya Day", type: "Poya" },
+  "2027-10-15": { name: "Vap Full Moon Poya Day", type: "Poya" },
+  "2027-10-29": { name: "Deepavali Festival Day", type: "Public" },
+  "2027-11-14": { name: "Il Full Moon Poya Day", type: "Poya" },
+  "2027-12-13": { name: "Unduvap Full Moon Poya Day", type: "Poya" },
+  "2027-12-25": { name: "Christmas Day", type: "Public" },
+};
+
+const POYA_NAMES: string[] = [
+  "Duruthu Full Moon Poya Day", // Jan
+  "Navam Full Moon Poya Day",    // Feb
+  "Medin Full Moon Poya Day",    // Mar
+  "Bak Full Moon Poya Day",      // Apr
+  "Vesak Full Moon Poya Day",    // May
+  "Poson Full Moon Poya Day",    // Jun
+  "Esala Full Moon Poya Day",    // Jul
+  "Nikini Full Moon Poya Day",   // Aug
+  "Binara Full Moon Poya Day",   // Sep
+  "Vap Full Moon Poya Day",      // Oct
+  "Il Full Moon Poya Day",       // Nov
+  "Unduvap Full Moon Poya Day"   // Dec
+];
+
+export function getCalculatedPoyaDay(date: Date): { name: string, type: 'Public' | 'Mercantile' | 'Poya' } | null {
+  const BASE_FULL_MOON_MS = Date.UTC(2025, 0, 13, 16, 56, 0); // Jan 13, 2025, 16:56 UTC
+  const SYNODIC_MONTH_MS = 29.530588853 * 24 * 60 * 60 * 1000;
+  
+  // Clone date and set to noon in Sri Lankan time (to be in the middle of the calendar day)
+  const targetDateAtNoon = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate(), 12, 0, 0));
+  
+  // Calculate difference relative to baseline, offset targetDateAtNoon by -5.5 hours to represent Sri Lankan noon in UTC
+  const targetSLNoonUTC = targetDateAtNoon.getTime() - 5.5 * 60 * 60 * 1000;
+  
+  const diff = targetSLNoonUTC - BASE_FULL_MOON_MS;
+  const cycles = diff / SYNODIC_MONTH_MS;
+  const nearestCycle = Math.round(cycles);
+  const nearestFullMoonUTC = BASE_FULL_MOON_MS + nearestCycle * SYNODIC_MONTH_MS;
+  
+  // Convert nearest full moon to Sri Lankan local date
+  const nearestSLFullMoonLocal = new Date(nearestFullMoonUTC + 5.5 * 60 * 60 * 1000);
+  
+  // Check if target date matches the nearest full moon date in Sri Lankan calendar
+  if (
+    date.getFullYear() === nearestSLFullMoonLocal.getUTCFullYear() &&
+    date.getMonth() === nearestSLFullMoonLocal.getUTCMonth() &&
+    date.getDate() === nearestSLFullMoonLocal.getUTCDate()
+  ) {
+    const month = nearestSLFullMoonLocal.getUTCMonth();
+    const name = POYA_NAMES[month] || "Full Moon Poya Day";
+    return { name, type: "Poya" };
+  }
+  
+  return null;
+}
+
 export function formatLocalDate(date: Date): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -202,7 +277,20 @@ export function formatLocalDate(date: Date): string {
 
 export function getSriLankanHoliday(date: Date): { name: string, type: 'Public' | 'Mercantile' | 'Poya' } | null {
   const dStr = formatLocalDate(date);
-  return HOLIDAYS_2025[dStr] || HOLIDAYS_2026[dStr] || null;
+  
+  // 1. Check hardcoded exact calendars
+  const hardcoded = HOLIDAYS_2025[dStr] || HOLIDAYS_2026[dStr] || HOLIDAYS_2027[dStr];
+  if (hardcoded) {
+    return hardcoded;
+  }
+  
+  // 2. Check dynamic fallback for other years (Poya Days only)
+  const year = date.getFullYear();
+  if (year !== 2025 && year !== 2026 && year !== 2027) {
+    return getCalculatedPoyaDay(date);
+  }
+  
+  return null;
 }
 
 export function isSunday(date: Date): boolean {
