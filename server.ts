@@ -60,31 +60,45 @@ You MUST follow these strict rules:
         let attempt = 0;
         while (attempt < maxAttempts) {
           try {
+            console.log(`[Backend] [Attempt ${attempt + 1}/${maxAttempts}] Calling Gemini API model "${modelName}" for translation. Input length: ${text.length}`);
+            
+            const config: any = {
+              systemInstruction,
+              temperature: 0.1,
+              responseMimeType: "application/json",
+              responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                  translation: {
+                    type: Type.STRING,
+                    description: "The direct standard English translation of the input text. No explanation, markdown, introductory text, or quotes."
+                  }
+                },
+                required: ["translation"]
+              }
+            };
+
+            // Only add thinkingConfig to models that natively support reasoning/thinking
+            if (modelName.includes("3.5-flash")) {
+              console.log(`[Backend] Model "${modelName}" supports reasoning. Attaching thinkingConfig...`);
+              config.thinkingConfig = {
+                thinkingLevel: ThinkingLevel.MINIMAL,
+              };
+            }
+
             const response = await ai.models.generateContent({
               model: modelName,
               contents: text,
-              config: {
-                systemInstruction,
-                temperature: 0.1,
-                responseMimeType: "application/json",
-                responseSchema: {
-                  type: Type.OBJECT,
-                  properties: {
-                    translation: {
-                      type: Type.STRING,
-                      description: "The direct standard English translation of the input text. No explanation, markdown, introductory text, or quotes."
-                    }
-                  },
-                  required: ["translation"]
-                },
-                thinkingConfig: {
-                  thinkingLevel: ThinkingLevel.MINIMAL,
-                }
-              }
+              config
             });
             
             const rawText = response.text?.trim();
-            if (!rawText) return text;
+            console.log(`[Backend] Raw model response received (length: ${rawText?.length || 0}):`, rawText);
+            
+            if (!rawText) {
+              console.warn(`[Backend] Empty response from model "${modelName}".`);
+              return text;
+            }
             
             try {
               const parsed = JSON.parse(rawText);
@@ -93,20 +107,25 @@ You MUST follow these strict rules:
                 if ((result.startsWith('"') && result.endsWith('"')) || (result.startsWith("'") && result.endsWith("'"))) {
                   result = result.substring(1, result.length - 1).trim();
                 }
+                console.log(`[Backend] Successfully parsed translation: "${result}"`);
                 return result;
+              } else {
+                console.warn("[Backend] Parsed response did not match expected schema:", parsed);
               }
-            } catch (jsonErr) {
-              console.error("[Backend] JSON Parse Error on raw model response:", rawText, jsonErr);
+            } catch (jsonErr: any) {
+              console.error("[Backend] JSON Parse Error on raw model response:", rawText, jsonErr.message);
             }
             
             return text;
           } catch (err: any) {
             attempt++;
+            console.error(`[Backend] Attempt ${attempt} on model "${modelName}" failed with error:`, err.message || err);
+            
             if (attempt >= maxAttempts) {
               throw err;
             }
             const delay = Math.pow(2, attempt) * 150 + Math.random() * 50;
-            console.log(`[Backend] Model ${modelName} reported service busy. Retrying (${attempt}/${maxAttempts}) in ${Math.round(delay)}ms...`);
+            console.log(`[Backend] Model ${modelName} encountered error. Retrying in ${Math.round(delay)}ms...`);
             await new Promise(resolve => setTimeout(resolve, delay));
           }
         }
@@ -114,18 +133,26 @@ You MUST follow these strict rules:
       };
 
       let translatedText = text;
+      let usedModel = "";
       try {
         try {
-          translatedText = await executeWithRetry("gemini-3.1-flash-lite", 3);
-          console.log(`[Backend] Translated description successfully via gemini-3.1-flash-lite`);
+          usedModel = "gemini-3.1-flash-lite";
+          translatedText = await executeWithRetry(usedModel, 3);
+          console.log(`[Backend] Translation completed successfully via gemini-3.1-flash-lite`);
         } catch (firstError: any) {
-          console.log(`[Backend] Primary translation model busy, selecting alternative gemini-3.5-flash...`);
-          translatedText = await executeWithRetry("gemini-3.5-flash", 2);
-          console.log(`[Backend] Translated description successfully via alternate gemini-3.5-flash`);
+          console.warn(`[Backend] gemini-3.1-flash-lite failed or busy (${firstError.message}). Selecting alternative gemini-3.5-flash...`);
+          usedModel = "gemini-3.5-flash";
+          translatedText = await executeWithRetry(usedModel, 2);
+          console.log(`[Backend] Translation completed successfully via alternate gemini-3.5-flash`);
         }
       } catch (genError: any) {
-        console.log("[Backend] Dynamic translation skipped. Retaining original description.");
-        translatedText = text;
+        console.error("[Backend] Dynamic translation skipped. Both models failed. Error details:", genError.message || genError);
+        res.json({ 
+          translation: text, 
+          fallback: true, 
+          error: `AI translation service error: ${genError.message || "Failed to parse API response"}` 
+        });
+        return;
       }
 
       res.json({ translation: translatedText });
