@@ -26,8 +26,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.log(`[Vercel Function] process.env.GEMINI_API_KEY status - exists: ${!!apiKey}, length: ${apiKey ? apiKey.length : 0}`);
     
     if (!apiKey) {
-      console.warn("[Vercel Function] GEMINI_API_KEY is missing from process.env. Falling back to original text immediately.");
-      return res.status(200).json({ translation: text, fallback: true, warning: "API Key missing" });
+      console.error("[Vercel Function] GEMINI_API_KEY is missing from process.env.");
+      return res.status(500).json({ error: "Gemini API key is not configured on the server." });
     }
 
     const ai = new GoogleGenAI({
@@ -143,10 +143,8 @@ Examples:
         console.log(`[Vercel Function] Translation completed successfully via alternate gemini-3.5-flash`);
       }
     } catch (genError: any) {
-      console.error("[Vercel Function] !!! BOTH MODELS FAILED. Falling back to returning original text. Error details:", genError.message || genError);
-      return res.status(200).json({ 
-        translation: text, 
-        fallback: true, 
+      console.error("[Vercel Function] !!! BOTH MODELS FAILED. Error details:", genError.message || genError);
+      return res.status(500).json({ 
         error: `AI translation service error: ${genError.message || "Failed to parse API response"}` 
       });
     }
@@ -155,9 +153,7 @@ Examples:
     return res.status(200).json({ translation: translatedText });
   } catch (error: any) {
     console.error("[Vercel Function] General translation function error:", error);
-    return res.status(200).json({ 
-      translation: req.body ? req.body.text : "", 
-      fallback: true, 
+    return res.status(500).json({ 
       error: error.message || "Failed to translate." 
     });
   }

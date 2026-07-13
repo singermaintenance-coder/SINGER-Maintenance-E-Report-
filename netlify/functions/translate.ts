@@ -32,11 +32,11 @@ export const handler: Handler = async (event) => {
     console.log(`[Netlify Function] process.env.GEMINI_API_KEY status - exists: ${!!apiKey}, length: ${apiKey ? apiKey.length : 0}`);
     
     if (!apiKey) {
-      console.warn("[Netlify Function] GEMINI_API_KEY is missing from process.env. Falling back to original text immediately.");
+      console.error("[Netlify Function] GEMINI_API_KEY is missing from process.env.");
       return {
-        statusCode: 200,
+        statusCode: 500,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ translation: text, fallback: true, warning: "API Key missing" }),
+        body: JSON.stringify({ error: "Gemini API key is not configured on the server." }),
       };
     }
 
@@ -153,13 +153,11 @@ Examples:
         console.log(`[Netlify Function] Translation completed successfully via alternate gemini-3.5-flash`);
       }
     } catch (genError: any) {
-      console.error("[Netlify Function] !!! BOTH MODELS FAILED. Falling back to returning original text. Error details:", genError.message || genError);
+      console.error("[Netlify Function] !!! BOTH MODELS FAILED. Error details:", genError.message || genError);
       return {
-        statusCode: 200,
+        statusCode: 500,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
-          translation: text, 
-          fallback: true, 
           error: `AI translation service error: ${genError.message || "Failed to parse API response"}` 
         }),
       };
@@ -174,9 +172,9 @@ Examples:
   } catch (error: any) {
     console.error("[Netlify Function] General translation function error:", error);
     return {
-      statusCode: 200,
+      statusCode: 500,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ translation: event.body ? JSON.parse(event.body).text : "", fallback: true, error: error.message || "Failed to translate." }),
+      body: JSON.stringify({ error: error.message || "Failed to translate." }),
     };
   }
 };

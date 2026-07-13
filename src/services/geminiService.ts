@@ -26,34 +26,35 @@ export async function translateToEnglish(text: string, throwOnError = false): Pr
     const duration = Date.now() - startTime;
     console.log(`[Client GeminiService] >>> STEP 4: Backend HTTP Response received. Status: ${response.status} (${response.statusText}). Request Duration: ${duration}ms`);
 
-    if (!response.ok) {
-      console.error(`[Client GeminiService] HTTP bad response. Status: ${response.status}`);
-      throw new Error(`HTTP error ${response.status}`);
+    let data: any = null;
+    try {
+      data = await response.json();
+    } catch (parseErr) {
+      console.error("[Client GeminiService] Failed to parse backend response as JSON:", parseErr);
     }
 
-    const data = await response.json();
+    if (!response.ok) {
+      const errorMsg = data?.error || `HTTP error ${response.status}`;
+      console.error(`[Client GeminiService] HTTP bad response. Status: ${response.status}. Error: ${errorMsg}`);
+      throw new Error(errorMsg);
+    }
+
     console.log(`[Client GeminiService] Parsed JSON response from backend:`, data);
 
-    if (data.fallback || data.error) {
-      const errorMsg = data.error || data.warning || "Translation service fell back to original text.";
-      console.warn(`[Client GeminiService] Translation service returned warning/fallback: ${errorMsg}`);
-      if (throwOnError) {
-        throw new Error(errorMsg);
-      }
+    if (data && data.error) {
+      console.warn(`[Client GeminiService] Translation service returned error: ${data.error}`);
+      throw new Error(data.error);
     }
 
-    const result = data.translation || trimmed;
+    const result = data?.translation || trimmed;
     
-    // Store in cache if it's not a fallback
-    if (!data.fallback) {
-      console.log(`[Client GeminiService] Caching successful translation. Key: "${trimmed}" -> Value: "${result}"`);
-      translationCache.set(trimmed, result);
-    } else {
-      console.log(`[Client GeminiService] Skipping caching due to fallback mode`);
-    }
+    // Store in cache
+    console.log(`[Client GeminiService] Caching successful translation. Key: "${trimmed}" -> Value: "${result}"`);
+    translationCache.set(trimmed, result);
+
     return result;
   } catch (error) {
-    console.error("[Client GeminiService] !!! STEP 4 (FAILED): HTTP request or response parsing failed. Details:", error);
+    console.error("[Client GeminiService] !!! STEP 4 (FAILED): HTTP request, response parsing, or translation failed. Details:", error);
     if (throwOnError) {
       throw error;
     }

@@ -25,10 +25,11 @@ async function startServer() {
 
     try {
       const apiKey = process.env.GEMINI_API_KEY;
-      console.log(`[Backend Route] >>> STEP 3b: Checking for GEMINI_API_KEY environment variable. Present: ${!!apiKey}`);
+      console.log(`[Backend Route] >>> STEP 3b: Checking for GEMINI_API_KEY environment variable.`);
+      console.log(`[Backend Route] process.env.GEMINI_API_KEY status - exists: ${!!apiKey}, length: ${apiKey ? apiKey.length : 0}`);
       if (!apiKey) {
-        console.warn("[Backend Route] GEMINI_API_KEY is missing. Falling back to original text immediately.");
-        res.json({ translation: text, fallback: true, warning: "API Key missing" });
+        console.error("[Backend Route] GEMINI_API_KEY is missing from process.env.");
+        res.status(500).json({ error: "Gemini API key is not configured on the server." });
         return;
       }
 
@@ -150,10 +151,8 @@ You MUST follow these strict rules:
           console.log(`[Backend Route] Translation completed successfully via alternate gemini-3.5-flash`);
         }
       } catch (genError: any) {
-        console.error("[Backend Route] !!! BOTH MODELS FAILED. Falling back to returning original text. Error details:", genError.message || genError);
-        res.json({ 
-          translation: text, 
-          fallback: true, 
+        console.error("[Backend Route] !!! BOTH MODELS FAILED. Error details:", genError.message || genError);
+        res.status(500).json({ 
           error: `AI translation service error: ${genError.message || "Failed to parse API response"}` 
         });
         return;
@@ -163,7 +162,7 @@ You MUST follow these strict rules:
       res.json({ translation: translatedText });
     } catch (error: any) {
       console.error("[Backend Route] General translation route error:", error);
-      res.json({ translation: text, fallback: true, error: error.message || "Failed to translate." });
+      res.status(500).json({ error: error.message || "Failed to translate." });
     }
   });
 
